@@ -673,7 +673,10 @@ struct ActivityGrid: View {
     var neutralColor = WidtgetPalette.neutral
     var labelColor = WidtgetPalette.secondaryText
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    private var columns: [GridItem] {
+        let columnCount = max(1, min(cells.count, 7))
+        return Array(repeating: GridItem(.flexible(), spacing: 4), count: columnCount)
+    }
 
     private var maximum: Double {
         Double(max(cells.map(\.totalChanged).max() ?? 0, 1))

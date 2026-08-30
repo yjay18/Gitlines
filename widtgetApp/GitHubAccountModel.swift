@@ -282,7 +282,7 @@ final class GitHubAccountModel: ObservableObject {
             try persist(archive)
             replacementAccountTokenInput = ""
             phase = .connected
-            notice = "Account token replaced. \(inspection.repositoryCount) repositories, including \(inspection.privateRepositoryCount) private, are available to widtget."
+            notice = "Account token replaced. \(inspection.repositoryCount) repositories, including \(inspection.privateRepositoryCount) private, are available to Gitlines."
         } catch {
             phase = .failed
             message = error.localizedDescription

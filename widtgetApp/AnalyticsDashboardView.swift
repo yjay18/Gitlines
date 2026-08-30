@@ -189,7 +189,7 @@ struct AnalyticsDashboardView: View {
             VStack(spacing: 7) {
                 Text("No signal yet")
                     .font(.system(size: 25, weight: .heavy, design: .rounded))
-                Text("Connect GitHub once. widtget will build the dashboard from the same display-ready snapshots used by the widget.")
+                Text("Connect GitHub once. Gitlines will build the dashboard from the same display-ready snapshots used by the widget.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(palette.muted)
                     .multilineTextAlignment(.center)

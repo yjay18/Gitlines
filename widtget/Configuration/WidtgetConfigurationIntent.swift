@@ -104,7 +104,7 @@ struct WidtgetConfigurationIntent: WidgetConfigurationIntent {
 
 struct SetActivityPeriodIntent: AppIntent {
     static let title: LocalizedStringResource = "Change activity period"
-    static let description = IntentDescription("Switch a widtget between daily, weekly, and monthly GitHub activity.")
+    static let description = IntentDescription("Switch a Gitlines widget between daily, weekly, and monthly GitHub activity.")
     static let openAppWhenRun = false
 
     @Parameter(title: "Period")

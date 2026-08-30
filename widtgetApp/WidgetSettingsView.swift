@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import WidgetKit
@@ -176,17 +177,15 @@ struct WidgetSettingsView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(DashboardPalette.green)
-                    Text("W")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundStyle(DashboardPalette.ink)
-                }
-                .frame(width: 34, height: 34)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .accessibilityHidden(true)
+                    .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("widtget")
+                    Text("Gitlines")
                         .font(.system(size: 15, weight: .heavy, design: .rounded))
                     Text("GITHUB SIGNAL")
                         .font(.system(size: 7, weight: .bold, design: .monospaced))
@@ -455,7 +454,7 @@ struct WidgetSettingsView: View {
             repositories: [
                 RepositoryActivity(name: "Studio-portal", commits: 12, additions: 19000, deletions: 2100),
                 RepositoryActivity(name: "linguistics", commits: 8, additions: 5000, deletions: 800),
-                RepositoryActivity(name: "widtget", commits: 6, additions: 6100, deletions: 757),
+                RepositoryActivity(name: "gitlines", commits: 6, additions: 6100, deletions: 757),
                 RepositoryActivity(name: "storymode", commits: 3, additions: 659, deletions: 40)
             ],
             activity: (0..<7).map { ActivityCell(id: $0, additions: adds[$0], deletions: dels[$0]) },
@@ -882,7 +881,7 @@ struct WidgetSettingsView: View {
                 }
                 .pickerStyle(.menu)
 
-                Text("Applies to every widtget widget. Automatic uses a system-tuned default; macOS still meters refreshes against the daily budget, so very short intervals are not guaranteed.")
+                Text("Applies to every Gitlines widget. Automatic uses a system-tuned default; macOS still meters refreshes against the daily budget, so very short intervals are not guaranteed.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1066,7 +1065,7 @@ struct WidgetSettingsView: View {
                     }
 
                     HStack(alignment: .top) {
-                        Text("widtget checks the token belongs to @\(github.username), refreshes every branch, then replaces the saved Keychain token. Your current token stays active if validation fails.")
+                        Text("Gitlines checks the token belongs to @\(github.username), refreshes every branch, then replaces the saved Keychain token. Your current token stays active if validation fails.")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1115,7 +1114,7 @@ struct WidgetSettingsView: View {
                     }
 
                     HStack(alignment: .top) {
-                        Text("widtget verifies the organization and repository access before saving. If approval is required, ask an organization owner to approve the token first.")
+                        Text("Gitlines verifies the organization and repository access before saving. If approval is required, ask an organization owner to approve the token first.")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1200,7 +1199,7 @@ struct WidgetSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Per-widget controls stay with the widget")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
-                    Text("Right-click a widtget on the desktop and choose Edit Widget.")
+                    Text("Right-click a Gitlines widget on the desktop and choose Edit Widget.")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }

@@ -120,7 +120,7 @@ struct DashboardAnalytics {
             return Review(
                 eyebrow: "\(eyebrowPrefix) · WAITING",
                 title: "Connect GitHub to begin the story.",
-                summary: "Once connected, widtget will turn the saved \(period.rawValue) snapshot into a concise, deterministic review.",
+                summary: "Once connected, Gitlines will turn the saved \(period.rawValue) snapshot into a concise, deterministic review.",
                 notes: []
             )
         case .loading:

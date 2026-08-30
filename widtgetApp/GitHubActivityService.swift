@@ -130,7 +130,7 @@ enum GitHubTokenStore {
 
         var add = protectedLookup
         add[kSecValueData as String] = data
-        add[kSecAttrLabel as String] = "widtget GitHub activity token"
+        add[kSecAttrLabel as String] = "Gitlines GitHub activity token"
         add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
@@ -256,10 +256,10 @@ enum GitHubTokenTemplate {
     static func url(resourceOwner: String? = nil) -> URL {
         var components = URLComponents(string: "https://github.com/settings/personal-access-tokens/new")!
         var query = [
-            URLQueryItem(name: "name", value: "widtget activity"),
+            URLQueryItem(name: "name", value: "Gitlines activity"),
             URLQueryItem(
                 name: "description",
-                value: "Read-only repository activity for the widtget macOS widget"
+                value: "Read-only repository activity for the Gitlines macOS widget"
             ),
             URLQueryItem(name: "expires_in", value: "90"),
             URLQueryItem(name: "contents", value: "read")
@@ -804,7 +804,7 @@ struct GitHubActivityService: Sendable {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
-        request.setValue("widtget/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("gitlines/1.0", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

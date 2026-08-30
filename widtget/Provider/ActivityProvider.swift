@@ -123,7 +123,7 @@ enum ActivityDataSource {
                     activity: (0..<7).map { ActivityCell(id: $0, additions: 0, deletions: 0) },
                     updatedAt: .now,
                     state: .error,
-                    errorMessage: "Open widtget · \(nsError.code)"
+                    errorMessage: "Open Gitlines · \(nsError.code)"
                 )
             )
         }
@@ -167,7 +167,7 @@ extension ActivitySnapshot {
         deletions: 43_332,
         commits: 80,
         repositories: [
-            RepositoryActivity(name: "widtget", commits: 72, additions: 29_303, deletions: 39_393),
+            RepositoryActivity(name: "gitlines", commits: 72, additions: 29_303, deletions: 39_393),
             RepositoryActivity(name: "pulse-kit", commits: 8, additions: 393, deletions: 3_939)
         ],
         activity: [
@@ -182,7 +182,7 @@ extension ActivitySnapshot {
         deletions: 76_905,
         commits: 214,
         repositories: [
-            RepositoryActivity(name: "widtget", commits: 96, additions: 61_204, deletions: 28_440),
+            RepositoryActivity(name: "gitlines", commits: 96, additions: 61_204, deletions: 28_440),
             RepositoryActivity(name: "pulse-kit", commits: 52, additions: 25_960, deletions: 31_802),
             RepositoryActivity(name: "swift-tools", commits: 31, additions: 18_070, deletions: 7_100),
             RepositoryActivity(name: "infra-notes", commits: 20, additions: 8_940, deletions: 6_822),
@@ -194,6 +194,18 @@ extension ActivitySnapshot {
             (16_500, 18_900), (29_600, 13_300), (7_800, 8_000)
         ].enumerated().map { ActivityCell(id: $0.offset, additions: $0.element.0, deletions: $0.element.1) },
         updatedAt: .now.addingTimeInterval(-14 * 60)
+    )
+
+    static let monthly = ActivitySnapshot(
+        additions: 284_760,
+        deletions: 131_480,
+        commits: 486,
+        repositories: weekly.repositories,
+        activity: [
+            (48_200, 21_400), (72_960, 28_180), (39_600, 34_900),
+            (81_300, 27_500), (42_700, 19_500)
+        ].enumerated().map { ActivityCell(id: $0.offset, additions: $0.element.0, deletions: $0.element.1) },
+        updatedAt: .now.addingTimeInterval(-11 * 60)
     )
 
     static let noActivity = ActivitySnapshot(

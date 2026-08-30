@@ -486,7 +486,7 @@ private struct WidgetBlockView: View {
     }
 
     private var repositoriesBlock: some View {
-        VStack(alignment: .leading, spacing: family == .extraLarge ? 9 : 6) {
+        VStack(alignment: .leading, spacing: repositoryRowSpacing) {
             blockLabel("REPOSITORIES / \(entry.snapshot.repositories.count)")
 
             if entry.snapshot.repositories.isEmpty {
@@ -496,12 +496,11 @@ private struct WidgetBlockView: View {
             } else {
                 ForEach(entry.snapshot.visibleRepositories(limit: repositoryLimit)) { repository in
                     repositoryRow(repository)
-                        .frame(maxHeight: isExpandedFamily ? .infinity : nil, alignment: .top)
                 }
 
                 let hiddenCount = entry.snapshot.hiddenRepositoryCount(limit: repositoryLimit)
                 if hiddenCount > 0 {
-                    Text("+\(hiddenCount) MORE REPOSITORIES")
+                    Text("+\(hiddenCount) MORE \(hiddenCount == 1 ? "REPOSITORY" : "REPOSITORIES")")
                         .font(.system(size: 6.5, weight: .black, design: .monospaced))
                         .foregroundStyle(foreground.opacity(0.62))
                 }
@@ -615,7 +614,7 @@ private struct WidgetBlockView: View {
 
     @ViewBuilder
     private func repositoryRow(_ repository: RepositoryActivity) -> some View {
-        if isExpandedFamily {
+        if isExpandedFamily && !usesDenseRepositoryRows {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(repository.name)
@@ -639,24 +638,17 @@ private struct WidgetBlockView: View {
                 .font(.system(size: 5.6, weight: .black, design: .monospaced))
                 .foregroundStyle(foreground.opacity(0.58))
 
-                GeometryReader { proxy in
-                    let total = CGFloat(max(repository.totalChanged, 1))
-                    HStack(spacing: 0) {
-                        foreground
-                            .opacity(0.76)
-                            .frame(width: proxy.size.width * CGFloat(repository.additions) / total)
-                        palette.deletion
-                            .opacity(0.84)
-                    }
-                    .background(foreground.opacity(0.14))
-                }
-                .frame(height: 4)
+                repositoryMagnitudeBar(repository, height: 4)
             }
         } else {
             VStack(spacing: 4) {
                 HStack(spacing: 5) {
                     Text(repository.name)
-                        .font(.system(size: 8, weight: .black, design: .rounded))
+                        .font(.system(
+                            size: family == .extraLarge ? 9.5 : 8,
+                            weight: .black,
+                            design: .rounded
+                        ))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .truncationMode(.tail)
@@ -666,11 +658,36 @@ private struct WidgetBlockView: View {
                         .foregroundStyle(palette.deletion)
                 }
                 .font(.system(size: 7, weight: .black, design: .monospaced))
-                Rectangle()
-                    .fill(foreground.opacity(0.7))
-                    .frame(height: preferences.visualTheme == .blockwork ? 2 : 1)
+                repositoryMagnitudeBar(
+                    repository,
+                    height: family == .extraLarge ? 3 : (preferences.visualTheme == .blockwork ? 2 : 1)
+                )
             }
         }
+    }
+
+    private func repositoryMagnitudeBar(
+        _ repository: RepositoryActivity,
+        height: CGFloat
+    ) -> some View {
+        GeometryReader { proxy in
+            let total = CGFloat(max(repository.totalChanged, 1))
+            let magnitudeWidth = proxy.size.width
+                * CGFloat(repository.totalChanged)
+                / maximumRepositoryChange
+
+            HStack(spacing: 0) {
+                foreground
+                    .opacity(0.76)
+                    .frame(width: magnitudeWidth * CGFloat(repository.additions) / total)
+                palette.deletion
+                    .opacity(0.84)
+                    .frame(width: magnitudeWidth * CGFloat(repository.deletions) / total)
+                Spacer(minLength: 0)
+            }
+            .background(foreground.opacity(0.14))
+        }
+        .frame(height: height)
     }
 
     private func expandedActivityChartHeight(availableHeight: CGFloat) -> CGFloat {
@@ -746,8 +763,21 @@ private struct WidgetBlockView: View {
         }
     }
 
+    private var usesDenseRepositoryRows: Bool {
+        family == .extraLarge
+            && entry.snapshot.visibleRepositories(limit: repositoryLimit).count > 6
+    }
+
+    private var repositoryRowSpacing: CGFloat {
+        usesDenseRepositoryRows ? 5 : (family == .extraLarge ? 9 : 6)
+    }
+
     private var activeIntervals: Int {
         entry.snapshot.activity.filter { $0.totalChanged > 0 }.count
+    }
+
+    private var maximumRepositoryChange: CGFloat {
+        CGFloat(max(entry.snapshot.repositories.map(\.totalChanged).max() ?? 0, 1))
     }
 
     private var isExpandedFamily: Bool {

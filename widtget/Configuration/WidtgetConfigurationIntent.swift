@@ -71,7 +71,7 @@ extension PeriodWindowMode: AppEnum {
 
 struct WidtgetConfigurationIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Activity period"
-    static let description = IntentDescription("Choose daily or weekly code activity.")
+    static let description = IntentDescription("Choose daily, weekly, or monthly code activity.")
 
     @Parameter(title: "Period", default: .daily)
     var period: ActivityPeriod
@@ -104,7 +104,7 @@ struct WidtgetConfigurationIntent: WidgetConfigurationIntent {
 
 struct SetActivityPeriodIntent: AppIntent {
     static let title: LocalizedStringResource = "Change activity period"
-    static let description = IntentDescription("Switch a widtget between daily and weekly GitHub activity.")
+    static let description = IntentDescription("Switch a widtget between daily, weekly, and monthly GitHub activity.")
     static let openAppWhenRun = false
 
     @Parameter(title: "Period")

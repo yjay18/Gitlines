@@ -36,6 +36,9 @@ struct WidgetSettingsView: View {
     @State private var isAddingOrganization = false
     @State private var selectedSection: HostSection = .dashboard
     @State private var dashboardWindowMode = SharedPreferences.windowMode
+    @State private var dashboardPeriod = SharedPreferences.defaults
+        .string(forKey: SharedPreferences.Key.dashboardPeriod)
+        .flatMap(ActivityPeriod.init(rawValue:)) ?? .weekly
     @State private var paneOrder = SharedPreferences.modularPreferences.paneOrder
     @State private var enabledPanes = SharedPreferences.modularPreferences.enabledPanes
     @State private var blockworkColorway = SharedPreferences.modularPreferences.colorway
@@ -86,12 +89,14 @@ struct WidgetSettingsView: View {
                     if visualTheme == .blockwork {
                         BlockworkAnalyticsDashboardView(
                             github: github,
+                            period: $dashboardPeriod,
                             windowMode: $dashboardWindowMode,
                             openConnections: { selectedSection = .connections }
                         )
                     } else {
                         AnalyticsDashboardView(
                             github: github,
+                            period: $dashboardPeriod,
                             windowMode: $dashboardWindowMode,
                             openConnections: { selectedSection = .connections }
                         )
@@ -131,6 +136,9 @@ struct WidgetSettingsView: View {
         .onChange(of: dashboardWindowMode) { _, newValue in
             SharedPreferences.windowMode = newValue
             reloadWidgets()
+        }
+        .onChange(of: dashboardPeriod) { _, newValue in
+            SharedPreferences.defaults.set(newValue.rawValue, forKey: SharedPreferences.Key.dashboardPeriod)
         }
         .onChange(of: familyLayouts) { _, _ in
             saveWidgetStudio()
@@ -815,211 +823,6 @@ struct WidgetSettingsView: View {
         }
     }
 
-    private func paneLibraryRow(_ pane: WidgetPane) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 11, weight: .black))
-                .foregroundStyle(studioMuted)
-
-            Image(systemName: pane.studioSymbol)
-                .font(.system(size: 12, weight: .bold))
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(pane.displayName)
-                    .font(.system(size: 11, weight: .black, design: .rounded))
-                Text(pane.detail)
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(studioMuted)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Toggle("", isOn: paneEnabledBinding(pane))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-        }
-        .padding(.horizontal, 11)
-        .frame(height: 54)
-        .background(enabledPanes.contains(pane) ? studioLime.opacity(0.24) : Color.clear)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(studioInk.opacity(0.24)).frame(height: 1)
-        }
-        .contentShape(Rectangle())
-        .onDrag {
-            draggedPane = pane
-            return NSItemProvider(object: pane.rawValue as NSString)
-        }
-        .onDrop(
-            of: [UTType.text],
-            delegate: WidgetPaneDropDelegate(
-                destination: pane,
-                panes: $paneOrder,
-                draggedPane: $draggedPane
-            )
-        )
-    }
-
-    private var studioWidgetPreview: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(github.username.isEmpty ? "@yjay18" : "@\(github.username)")
-                    .font(.system(size: 10, weight: .black, design: .rounded))
-                Spacer()
-                Text("WEEKLY")
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                    .foregroundStyle(studioInk)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(studioLime)
-                Image(systemName: "arrow.clockwise")
-                    .foregroundStyle(studioLime)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .foregroundStyle(studioPaper)
-            .background(studioInk)
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 3),
-                    GridItem(.flexible(), spacing: 3)
-                ],
-                spacing: 3
-            ) {
-                ForEach(paneOrder.filter(enabledPanes.contains)) { pane in
-                    studioPanePreview(pane)
-                }
-            }
-            .padding(3)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(studioInk)
-        }
-        .frame(maxWidth: 590, minHeight: 360, maxHeight: 430)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(0.28), radius: 22, y: 14)
-        .hueRotation(studioHueRotation)
-        .saturation(blockworkColorway == .mono ? 0 : 1)
-        .animation(.snappy(duration: 0.28), value: paneOrder)
-        .animation(.snappy(duration: 0.28), value: enabledPanes)
-    }
-
-    @ViewBuilder
-    private func studioPanePreview(_ pane: WidgetPane) -> some View {
-        switch pane {
-        case .additions:
-            studioPreviewTile(title: "LINES MADE", value: "+25,036", color: studioOrange)
-        case .deletions:
-            studioPreviewTile(
-                title: "LINES REMOVED",
-                value: "−1,031",
-                color: studioInk,
-                foreground: studioPaper,
-                valueColor: studioOrange
-            )
-        case .summary:
-            studioPreviewTile(title: "SUMMARY", value: "29 / 3", color: studioLime)
-        case .activity:
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ACTIVITY")
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                HStack(alignment: .bottom, spacing: 5) {
-                    ForEach(Array([0.92, 0.72, 0.23, 0.05, 0.78, 0.69, 0.66].enumerated()), id: \.offset) { _, value in
-                        Rectangle()
-                            .fill(studioInk)
-                            .frame(height: 52 * value)
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .background(studioSky)
-        case .activityTable:
-            studioPreviewTile(title: "ACTIVITY TABLE", value: "▦ ▦ ▦", color: studioSky)
-        case .insights:
-            studioPreviewTile(title: "NET / PEAK / AVG", value: "+24k", color: studioLime)
-        case .repositories:
-            VStack(alignment: .leading, spacing: 8) {
-                Text("REPOSITORIES / 03")
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                ForEach(["linguist  +19k", "Studio  +5k", "storymode  +659"], id: \.self) { repository in
-                    Text(repository)
-                        .font(.system(size: 9, weight: .black, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 4)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(studioInk).frame(height: 1)
-                        }
-                }
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .background(studioPaper)
-        case .snake:
-            HStack(spacing: 12) {
-                Image(systemName: "circle.grid.3x3.fill")
-                    .font(.system(size: 31, weight: .black))
-                    .foregroundStyle(studioLime)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("snek happy")
-                        .font(.system(size: 16, weight: .black, design: .rounded))
-                    Text("29 COMMITS")
-                        .font(.system(size: 7, weight: .black, design: .monospaced))
-                        .foregroundStyle(studioLime)
-                }
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .foregroundStyle(studioPaper)
-            .background(studioInk)
-        }
-    }
-
-    private func studioPreviewTile(
-        title: String,
-        value: String,
-        color: Color,
-        foreground: Color? = nil,
-        valueColor: Color? = nil
-    ) -> some View {
-        let foreground = foreground ?? studioInk
-        return VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 8, weight: .black, design: .monospaced))
-            Text(value)
-                .font(.system(size: 27, weight: .black, design: .rounded))
-                .tracking(-1.4)
-                .foregroundStyle(valueColor ?? foreground)
-                .lineLimit(1)
-                .minimumScaleFactor(0.62)
-        }
-        .foregroundStyle(foreground)
-        .padding(11)
-        .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
-        .background(color)
-    }
-
-    private func paneEnabledBinding(_ pane: WidgetPane) -> Binding<Bool> {
-        Binding {
-            enabledPanes.contains(pane)
-        } set: { isEnabled in
-            withAnimation(.snappy(duration: 0.22)) {
-                if isEnabled {
-                    enabledPanes.insert(pane)
-                } else {
-                    enabledPanes.remove(pane)
-                }
-            }
-        }
-    }
-
     private var studioInk: Color {
         Color(red: 0.063, green: 0.067, blue: 0.059)
     }
@@ -1043,11 +846,6 @@ struct WidgetSettingsView: View {
     private var studioMuted: Color {
         Color(red: 0.46, green: 0.45, blue: 0.41)
     }
-
-    private var studioHueRotation: Angle {
-        blockworkColorway == .cobalt ? .degrees(198) : .zero
-    }
-
     private var connectionsContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -1444,11 +1242,6 @@ struct WidgetSettingsView: View {
             }
         }
     }
-
-    private var isAnyBlockwork: Bool {
-        visualTheme == .blockwork || themeOverrides.values.contains(.blockwork)
-    }
-
     private func themeOverrideBinding(_ family: WidgetLayoutFamily) -> Binding<WidgetVisualTheme?> {
         Binding(
             get: { themeOverrides[family] },

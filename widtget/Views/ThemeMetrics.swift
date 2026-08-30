@@ -48,24 +48,31 @@ extension ActivityEntry {
         return labels.indices.contains(index) ? labels[index] : "—"
     }
 
-    // Period-aware caption for the activity chart, so a monthly widget doesn't read
-    // "seven day rhythm" over week buckets.
-    var rhythmCaption: String {
-        switch period {
-        case .daily: "hourly rhythm"
-        case .weekly: "seven day rhythm"
-        case .monthly: "weekly rhythm"
-        }
-    }
+    var rhythmCaption: String { period.rhythmCaption }
 
     // Title for the per-interval ledger (Broadsheet's day book).
     var ledgerCaption: String {
         period == .monthly ? "The week book" : "The day book"
     }
 
+    var spanLabel: String { period.spanLabel(windowMode: preferences.periodWindowMode) }
+}
+
+// Shared period phrasing for widgets and the host dashboard.
+extension ActivityPeriod {
+    // Period-aware caption for the activity chart, so a monthly view doesn't read
+    // "seven day rhythm" over week buckets.
+    var rhythmCaption: String {
+        switch self {
+        case .daily: "hourly rhythm"
+        case .weekly: "seven day rhythm"
+        case .monthly: "weekly rhythm"
+        }
+    }
+
     // Human phrase for the active window, e.g. "this month" or "last 30 days".
-    var spanLabel: String {
-        switch (period, preferences.periodWindowMode) {
+    func spanLabel(windowMode: PeriodWindowMode) -> String {
+        switch (self, windowMode) {
         case (.daily, .fixed): "today"
         case (.daily, .rolling): "last 24 hours"
         case (.weekly, .fixed): "this week"

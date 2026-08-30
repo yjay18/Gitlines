@@ -10,9 +10,7 @@
 		A20000000000000000000001 /* WidtgetConfigurationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* WidtgetConfigurationIntent.swift */; };
 		A20000000000000000000002 /* ActivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* ActivityProvider.swift */; };
 		A20000000000000000000003 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* Palette.swift */; };
-		A20000000000000000000004 /* MetricViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* MetricViews.swift */; };
 		A20000000000000000000005 /* ActivityVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* ActivityVisualization.swift */; };
-		A20000000000000000000006 /* RepositoryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* RepositoryViews.swift */; };
 		A20000000000000000000007 /* WidtgetWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* WidtgetWidgetView.swift */; };
 		A20000000000000000000008 /* DefaultWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* DefaultWidgetView.swift */; };
 		A20000000000000000000009 /* ThemeMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001E /* ThemeMetrics.swift */; };
@@ -24,9 +22,7 @@
 		A10000000000000000000002 /* WidtgetConfigurationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* WidtgetConfigurationIntent.swift */; };
 		A10000000000000000000003 /* ActivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* ActivityProvider.swift */; };
 		A10000000000000000000004 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* Palette.swift */; };
-		A10000000000000000000005 /* MetricViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* MetricViews.swift */; };
 		A10000000000000000000006 /* ActivityVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* ActivityVisualization.swift */; };
-		A10000000000000000000007 /* RepositoryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* RepositoryViews.swift */; };
 		A10000000000000000000008 /* WidtgetWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* WidtgetWidgetView.swift */; };
 		A10000000000000000000009 /* WidtgetWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* WidtgetWidget.swift */; };
 		A1000000000000000000000A /* WidtgetPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* WidtgetPreviews.swift */; };
@@ -49,6 +45,7 @@
 		A1000000000000000000001B /* DashboardAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* DashboardAnalytics.swift */; };
 		A1000000000000000000001C /* AnalyticsDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001C /* AnalyticsDashboardView.swift */; };
 		A10000000000000000000023 /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000023 /* ThemePalette.swift */; };
+		A10000000000000000000024 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000024 /* Assets.xcassets */; };
 		A1000000000000000000001D /* DefaultWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* DefaultWidgetView.swift */; };
 		A1000000000000000000001E /* ThemeMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001E /* ThemeMetrics.swift */; };
 		A1000000000000000000001F /* GlasshouseWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001F /* GlasshouseWidgetView.swift */; };
@@ -86,9 +83,7 @@
 		B10000000000000000000002 /* WidtgetConfigurationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidtgetConfigurationIntent.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* ActivityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityProvider.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
-		B10000000000000000000005 /* MetricViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricViews.swift; sourceTree = "<group>"; };
 		B10000000000000000000006 /* ActivityVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityVisualization.swift; sourceTree = "<group>"; };
-		B10000000000000000000007 /* RepositoryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryViews.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* WidtgetWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidtgetWidgetView.swift; sourceTree = "<group>"; };
 		B10000000000000000000009 /* WidtgetWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidtgetWidget.swift; sourceTree = "<group>"; };
 		B1000000000000000000000A /* WidtgetPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidtgetPreviews.swift; sourceTree = "<group>"; };
@@ -111,6 +106,7 @@
 		B1000000000000000000001B /* DashboardAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardAnalytics.swift; sourceTree = "<group>"; };
 		B1000000000000000000001C /* AnalyticsDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsDashboardView.swift; sourceTree = "<group>"; };
 		B10000000000000000000023 /* ThemePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePalette.swift; sourceTree = "<group>"; };
+		B10000000000000000000024 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B1000000000000000000001D /* DefaultWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultWidgetView.swift; sourceTree = "<group>"; };
 		B1000000000000000000001E /* ThemeMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeMetrics.swift; sourceTree = "<group>"; };
 		B1000000000000000000001F /* GlasshouseWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlasshouseWidgetView.swift; sourceTree = "<group>"; };
@@ -217,9 +213,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000004 /* Palette.swift */,
-				B10000000000000000000005 /* MetricViews.swift */,
 				B10000000000000000000006 /* ActivityVisualization.swift */,
-				B10000000000000000000007 /* RepositoryViews.swift */,
 				B10000000000000000000008 /* WidtgetWidgetView.swift */,
 				B1000000000000000000001D /* DefaultWidgetView.swift */,
 				B1000000000000000000001E /* ThemeMetrics.swift */,
@@ -243,6 +237,7 @@
 		D1000000000000000000000A /* widtgetApp */ = {
 			isa = PBXGroup;
 			children = (
+				B10000000000000000000024 /* Assets.xcassets */,
 				B10000000000000000000012 /* WidtgetHostApp.swift */,
 				B10000000000000000000013 /* WidgetSettingsView.swift */,
 				B1000000000000000000001C /* AnalyticsDashboardView.swift */,
@@ -356,6 +351,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000024 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,9 +367,7 @@
 				A10000000000000000000002 /* WidtgetConfigurationIntent.swift in Sources */,
 				A10000000000000000000003 /* ActivityProvider.swift in Sources */,
 				A10000000000000000000004 /* Palette.swift in Sources */,
-				A10000000000000000000005 /* MetricViews.swift in Sources */,
 				A10000000000000000000006 /* ActivityVisualization.swift in Sources */,
-				A10000000000000000000007 /* RepositoryViews.swift in Sources */,
 				A10000000000000000000008 /* WidtgetWidgetView.swift in Sources */,
 				A1000000000000000000001D /* DefaultWidgetView.swift in Sources */,
 				A1000000000000000000001E /* ThemeMetrics.swift in Sources */,
@@ -394,9 +388,7 @@
 				A20000000000000000000001 /* WidtgetConfigurationIntent.swift in Sources */,
 				A20000000000000000000002 /* ActivityProvider.swift in Sources */,
 				A20000000000000000000003 /* Palette.swift in Sources */,
-				A20000000000000000000004 /* MetricViews.swift in Sources */,
 				A20000000000000000000005 /* ActivityVisualization.swift in Sources */,
-				A20000000000000000000006 /* RepositoryViews.swift in Sources */,
 				A20000000000000000000007 /* WidtgetWidgetView.swift in Sources */,
 				A20000000000000000000008 /* DefaultWidgetView.swift in Sources */,
 				A20000000000000000000009 /* ThemeMetrics.swift in Sources */,
@@ -521,6 +513,7 @@
 		F10000000000000000000007 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = widtgetApp/widtgetApp.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -546,6 +539,7 @@
 		F10000000000000000000008 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = widtgetApp/widtgetApp.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

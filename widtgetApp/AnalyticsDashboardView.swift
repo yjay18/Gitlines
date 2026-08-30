@@ -14,6 +14,7 @@ enum DashboardPalette {
 struct AnalyticsDashboardView: View {
     @Environment(\.themePalette) private var palette
     @ObservedObject var github: GitHubAccountModel
+    @Binding var period: ActivityPeriod
     @Binding var windowMode: PeriodWindowMode
     let openConnections: () -> Void
 
@@ -41,11 +42,17 @@ struct AnalyticsDashboardView: View {
                 revealed = true
             }
         }
+        .onChange(of: period) { _, _ in
+            revealed = false
+            withAnimation(.spring(response: 0.72, dampingFraction: 0.82).delay(0.05)) {
+                revealed = true
+            }
+        }
     }
 
     private func dashboard(archive: ActivitySnapshotArchive) -> some View {
-        let snapshot = archive.snapshot(for: .weekly, windowMode: windowMode)
-        let analytics = WeeklyDashboardAnalytics(snapshot: snapshot, windowMode: windowMode)
+        let snapshot = archive.snapshot(for: period.storedPeriod, windowMode: windowMode)
+        let analytics = DashboardAnalytics(snapshot: snapshot, period: period, windowMode: windowMode)
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -55,7 +62,7 @@ struct AnalyticsDashboardView: View {
                     NumberCard(
                         label: "COMMITS",
                         value: snapshot.commits,
-                        suffix: "this week",
+                        suffix: analytics.spanLabel,
                         color: palette.text,
                         revealed: revealed
                     )
@@ -78,13 +85,13 @@ struct AnalyticsDashboardView: View {
                 }
 
                 HStack(alignment: .top, spacing: 12) {
-                    WeeklyPulseCard(analytics: analytics, revealed: revealed)
+                    PulseCard(analytics: analytics, revealed: revealed)
                         .frame(maxWidth: .infinity)
                     ChangeShapeCard(analytics: analytics, revealed: revealed)
                         .frame(width: 220)
                 }
 
-                WeeklyReviewCard(review: analytics.review, revealed: revealed)
+                ReviewCard(review: analytics.review, revealed: revealed)
 
                 RepositoryLedgerCard(analytics: analytics, revealed: revealed)
             }
@@ -92,10 +99,15 @@ struct AnalyticsDashboardView: View {
         }
     }
 
+    private var spanTitle: String {
+        let label = period.spanLabel(windowMode: windowMode)
+        return label.prefix(1).uppercased() + label.dropFirst()
+    }
+
     private func dashboardHeader(archive: ActivitySnapshotArchive) -> some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("WEEKLY SIGNAL")
+                Text("\(period.displayName) SIGNAL")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .tracking(1.8)
                     .foregroundStyle(palette.green)
@@ -103,7 +115,7 @@ struct AnalyticsDashboardView: View {
                 Text(github.username.isEmpty ? "Your activity" : "@\(github.username)")
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
 
-                Text(windowMode == .fixed ? "This calendar week" : "The last seven days")
+                Text(spanTitle)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(palette.muted)
             }
@@ -112,13 +124,22 @@ struct AnalyticsDashboardView: View {
 
             VStack(alignment: .trailing, spacing: 5) {
                 HStack(spacing: 8) {
+                    Picker("Dashboard period", selection: $period) {
+                        ForEach(ActivityPeriod.allCases, id: \.self) { option in
+                            Text(option.rawValue.capitalized).tag(option)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 168)
+
                     Picker("Dashboard window", selection: $windowMode) {
                         Text("Calendar").tag(PeriodWindowMode.fixed)
                         Text("Rolling").tag(PeriodWindowMode.rolling)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(width: 150)
+                    .frame(width: 132)
 
                     Button {
                         Task { await github.refresh(scope: .allBranches) }
@@ -166,7 +187,7 @@ struct AnalyticsDashboardView: View {
             .frame(width: 84, height: 84)
 
             VStack(spacing: 7) {
-                Text("No weekly signal yet")
+                Text("No signal yet")
                     .font(.system(size: 25, weight: .heavy, design: .rounded))
                 Text("Connect GitHub once. widtget will build the dashboard from the same display-ready snapshots used by the widget.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -184,6 +205,7 @@ struct AnalyticsDashboardView: View {
 
 struct BlockworkAnalyticsDashboardView: View {
     @ObservedObject var github: GitHubAccountModel
+    @Binding var period: ActivityPeriod
     @Binding var windowMode: PeriodWindowMode
     let openConnections: () -> Void
 
@@ -206,15 +228,15 @@ struct BlockworkAnalyticsDashboardView: View {
     }
 
     private func dashboard(_ archive: ActivitySnapshotArchive) -> some View {
-        let snapshot = archive.snapshot(for: .weekly, windowMode: windowMode)
-        let analytics = WeeklyDashboardAnalytics(snapshot: snapshot, windowMode: windowMode)
+        let snapshot = archive.snapshot(for: period.storedPeriod, windowMode: windowMode)
+        let analytics = DashboardAnalytics(snapshot: snapshot, period: period, windowMode: windowMode)
 
         return ScrollView {
             VStack(spacing: 4) {
                 header(archive)
 
                 HStack(spacing: 4) {
-                    metricTile("COMMITS", snapshot.commits.formatted(), detail: "THIS WEEK", fill: lime)
+                    metricTile("COMMITS", snapshot.commits.formatted(), detail: analytics.spanLabel.uppercased(), fill: lime)
                     metricTile("LINES MADE", ActivityNumberFormat.exact(snapshot.additions, sign: "+"), detail: "ADDITIONS", fill: orange)
                     metricTile("LINES REMOVED", ActivityNumberFormat.exact(snapshot.deletions, sign: "−"), detail: "DELETIONS", fill: ink, light: true)
                 }
@@ -236,7 +258,7 @@ struct BlockworkAnalyticsDashboardView: View {
     private func header(_ archive: ActivitySnapshotArchive) -> some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("WEEKLY OUTPUT / BLOCKWORK")
+                Text("\(period.displayName) OUTPUT / BLOCKWORK")
                     .font(.system(size: 9, weight: .black, design: .monospaced))
                     .tracking(1.2)
                     .foregroundStyle(orange)
@@ -247,13 +269,22 @@ struct BlockworkAnalyticsDashboardView: View {
 
             Spacer()
 
+            Picker("Dashboard period", selection: $period) {
+                ForEach(ActivityPeriod.allCases, id: \.self) { option in
+                    Text(option.rawValue.capitalized).tag(option)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 168)
+
             Picker("Dashboard window", selection: $windowMode) {
                 Text("Calendar").tag(PeriodWindowMode.fixed)
                 Text("Rolling").tag(PeriodWindowMode.rolling)
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 150)
+            .frame(width: 132)
 
             Button {
                 Task { await github.refresh(scope: .allBranches) }
@@ -307,7 +338,7 @@ struct BlockworkAnalyticsDashboardView: View {
         .background(fill)
     }
 
-    private func activityTile(_ analytics: WeeklyDashboardAnalytics) -> some View {
+    private func activityTile(_ analytics: DashboardAnalytics) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 blockLabel("ACTIVITY / \(analytics.snapshot.activity.count) INTERVALS")
@@ -328,8 +359,8 @@ struct BlockworkAnalyticsDashboardView: View {
                                     .frame(height: max(3, proxy.size.height * ratio))
                             }
                         }
-                        Text(analytics.intervalLabels.indices.contains(index)
-                             ? analytics.intervalLabels[index].prefix(2).uppercased()
+                        Text(analytics.axisLabels.indices.contains(index)
+                             ? analytics.axisLabels[index].uppercased()
                              : "\(index + 1)")
                             .font(.system(size: 7, weight: .black, design: .monospaced))
                     }
@@ -356,7 +387,7 @@ struct BlockworkAnalyticsDashboardView: View {
         .background(sky)
     }
 
-    private func reviewTile(_ review: WeeklyDashboardAnalytics.Review) -> some View {
+    private func reviewTile(_ review: DashboardAnalytics.Review) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             blockLabel(review.eyebrow)
             Text(review.title)
@@ -367,7 +398,7 @@ struct BlockworkAnalyticsDashboardView: View {
                 .lineSpacing(3)
                 .foregroundStyle(ink.opacity(0.68))
             Spacer(minLength: 0)
-            Text("DETERMINISTIC / WEEKLY")
+            Text("DETERMINISTIC / \(period.displayName)")
                 .font(.system(size: 7, weight: .black, design: .monospaced))
                 .padding(7)
                 .background(orange)
@@ -433,7 +464,7 @@ struct BlockworkAnalyticsDashboardView: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Text("NO WEEKLY OUTPUT")
+            Text("NO OUTPUT YET")
                 .font(.system(size: 10, weight: .black, design: .monospaced))
                 .tracking(1)
             Text("Connect GitHub to assemble the dashboard.")
@@ -483,9 +514,9 @@ private struct NumberCard: View {
     }
 }
 
-private struct WeeklyPulseCard: View {
+private struct PulseCard: View {
     @Environment(\.themePalette) private var palette
-    let analytics: WeeklyDashboardAnalytics
+    let analytics: DashboardAnalytics
     let revealed: Bool
 
     var body: some View {
@@ -534,8 +565,8 @@ private struct WeeklyPulseCard: View {
                             )
                         }
 
-                        Text(analytics.intervalLabels.indices.contains(index)
-                             ? analytics.intervalLabels[index].prefix(2).uppercased()
+                        Text(analytics.axisLabels.indices.contains(index)
+                             ? analytics.axisLabels[index].uppercased()
                              : "\(index + 1)")
                             .font(.system(size: 8, weight: .bold, design: .monospaced))
                             .foregroundStyle(palette.muted)
@@ -562,7 +593,7 @@ private struct WeeklyPulseCard: View {
 
 private struct ChangeShapeCard: View {
     @Environment(\.themePalette) private var palette
-    let analytics: WeeklyDashboardAnalytics
+    let analytics: DashboardAnalytics
     let revealed: Bool
 
     var body: some View {
@@ -641,9 +672,9 @@ private struct ChangeShapeCard: View {
     }
 }
 
-private struct WeeklyReviewCard: View {
+private struct ReviewCard: View {
     @Environment(\.themePalette) private var palette
-    let review: WeeklyDashboardAnalytics.Review
+    let review: DashboardAnalytics.Review
     let revealed: Bool
 
     var body: some View {
@@ -704,7 +735,7 @@ private struct WeeklyReviewCard: View {
 
 private struct RepositoryLedgerCard: View {
     @Environment(\.themePalette) private var palette
-    let analytics: WeeklyDashboardAnalytics
+    let analytics: DashboardAnalytics
     let revealed: Bool
 
     var body: some View {
@@ -796,7 +827,7 @@ private struct RepositoryLedgerRow: View {
 
 private struct ReviewNoteView: View {
     @Environment(\.themePalette) private var palette
-    let note: WeeklyDashboardAnalytics.Review.Note
+    let note: DashboardAnalytics.Review.Note
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {

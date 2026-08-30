@@ -1,10 +1,10 @@
 # widtget
 
-`widtget` is a widget-first native macOS product for focused code-activity snapshots. Its small host app exists only to install the WidgetKit extension, manage the GitHub connection and data refresh, and control shared appearance preferences—there is no dashboard, detailed statistics page, or app-style navigation.
+`widtget` is a widget-first native macOS product for focused code-activity snapshots. Its small host app installs the WidgetKit extension, manages the GitHub connection and data refresh, controls shared appearance preferences, and renders an analytics dashboard from the same display-ready snapshots the widgets use.
 
 ## What is included
 
-- Native `AppIntentConfiguration` with **Daily** and **Weekly** modes.
+- Native `AppIntentConfiguration` with **Daily**, **Weekly**, and **Monthly** modes.
 - Purpose-built small, medium, large, and extra-large layouts.
 - Large tabular addition/deletion totals, compact commit and repository metrics, proportional repository bars, and two-color activity visualizations.
 - Loading, no-activity, API-error/retry, stale-data, and “+N more” visual states.
@@ -23,9 +23,9 @@
 4. Run the `widtget app` target once so macOS registers the embedded widget.
 5. Connect GitHub in the host app using the setup below.
 6. Open `WidtgetPreviews.swift` to inspect all widget families and states in the canvas.
-7. Add `widtget` from the macOS widget gallery. Edit an individual widget to select Daily or Weekly.
+7. Add `widtget` from the macOS widget gallery. Edit an individual widget to select Daily, Weekly, or Monthly.
 
-The app controls global appearance preferences. Daily/Weekly remains a native, per-widget setting so multiple instances can show different periods.
+The app controls global appearance preferences. The period remains a native, per-widget setting so multiple instances can show different periods; the dashboard has its own period toggle.
 
 The project targets macOS 14 because it uses native App Intent widget configuration and interactive retry.
 
@@ -38,7 +38,7 @@ The project targets macOS 14 because it uses native App Intent widget configurat
 
 GitHub limits each fine-grained personal access token to one resource owner, so every additional organization needs its own token. `widtget` validates that the organization is actually visible to the token and that all connected tokens authenticate the same GitHub user. The connection manager shows each owner and accessible repository count, supports independent organization removal, stores all tokens only in Keychain, merges repositories across owners, and deduplicates repositories and commits.
 
-Activity is calculated from commits authored by the authenticated user across every accessible branch. The **Fixed** window uses the current local calendar day or week; **Rolling** uses the last 24 hours or seven days. Both are cached on every refresh so the setting can switch immediately. Commits reachable from multiple branches are deduplicated by repository and SHA, and addition/deletion totals come from GitHub's individual commit statistics.
+Activity is calculated from commits authored by the authenticated user across every accessible branch. The **Fixed** window uses the current local calendar day, week, or month; **Rolling** uses the last 24 hours, 7 days, or 30 days. Both are cached on every refresh so the setting can switch immediately. Commits reachable from multiple branches are deduplicated by repository and SHA, and addition/deletion totals come from GitHub's individual commit statistics.
 
 Select **Refresh** in the host app to perform a full branch discovery and remember branches containing recent activity. Refreshing from the widget is intentionally lighter: it checks each active repository's default branch plus the previously discovered activity branches. Opening the app also uses this lightweight refresh when the cache is older than 15 minutes. If refresh fails, the widget keeps the last successful snapshot and marks it stale.
 

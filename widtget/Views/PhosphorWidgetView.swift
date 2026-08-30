@@ -53,6 +53,14 @@ struct PhosphorWidgetView: View {
     private var user: String { entry.username.isEmpty ? "github" : entry.username }
     private var netSign: Character { entry.snapshot.net < 0 ? "−" : "+" }
 
+    private var sincePrompt: String {
+        switch entry.period {
+        case .daily: "$ git log --numstat --since=1.day"
+        case .weekly: "$ git log --numstat --since=1.week"
+        case .monthly: "$ git log --numstat --since=1.month"
+        }
+    }
+
     private func value(_ v: Int, sign: Character) -> String {
         loading ? "\(sign)—" : "\(sign)\(abs(v))"
     }
@@ -83,7 +91,7 @@ struct PhosphorWidgetView: View {
             PhosphorHeader(entry: entry, user: user)
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 5) {
-                    dim("$ git log --numstat --since=1.week")
+                    dim(sincePrompt)
                     Text(value(entry.snapshot.additions, sign: "+"))
                         .font(.system(size: 30, weight: .bold, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.5)
                     Text(value(entry.snapshot.deletions, sign: "−"))
@@ -107,7 +115,7 @@ struct PhosphorWidgetView: View {
     private var large: some View {
         VStack(alignment: .leading, spacing: 8) {
             PhosphorHeader(entry: entry, user: user)
-            dim("$ git log --numstat --since=1.week")
+            dim(sincePrompt)
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(value(entry.snapshot.additions, sign: "+"))

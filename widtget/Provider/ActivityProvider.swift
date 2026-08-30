@@ -130,7 +130,7 @@ enum ActivityDataSource {
     }
 }
 
-private extension ActivityPeriod {
+extension ActivityPeriod {
     var storedPeriod: StoredActivityPeriod {
         switch self {
         case .daily: .daily

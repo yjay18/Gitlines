@@ -69,6 +69,48 @@ struct DashboardHistory: Codable, Sendable {
     }
 }
 
+extension DashboardHistory {
+    static let sample: DashboardHistory = {
+        let calendar = Calendar.current
+        let now = Date()
+        let repositories = [
+            DashboardRepository(id: "octocat/widget-lab", isPrivate: false, isArchived: false, pushedAt: now),
+            DashboardRepository(id: "octocat/terminal-theme", isPrivate: false, isArchived: false, pushedAt: calendar.date(byAdding: .day, value: -2, to: now)),
+            DashboardRepository(id: "octocat/release-notes", isPrivate: false, isArchived: false, pushedAt: calendar.date(byAdding: .day, value: -5, to: now)),
+            DashboardRepository(id: "octocat/activity-kit", isPrivate: false, isArchived: false, pushedAt: calendar.date(byAdding: .day, value: -8, to: now))
+        ]
+        var commits: [DashboardCommit] = []
+        for day in 0..<90 {
+            let count = [0, 2, 1, 4, 3, 0, 2, 5, 1, 3, 2, 0][day % 12]
+            for index in 0..<count {
+                let repository = repositories[(day + index) % repositories.count]
+                let date = calendar.date(byAdding: .hour, value: -(day * 24 + index * 2 + 1), to: now)!
+                commits.append(DashboardCommit(
+                    repository: repository.id,
+                    sha: String(format: "sample%03d%02d", day, index),
+                    date: date,
+                    message: ["Refine widget layout", "Improve activity summary", "Polish theme details", "Tighten refresh flow"][(day + index) % 4],
+                    additions: 18 + ((day * 37 + index * 11) % 420),
+                    deletions: 4 + ((day * 13 + index * 7) % 96)
+                ))
+            }
+        }
+        let coverageStart = calendar.date(byAdding: .day, value: -180, to: now)!
+        let coverageEnd = calendar.date(byAdding: .day, value: 1, to: now)!
+        let coverage = Dictionary(uniqueKeysWithValues: repositories.map {
+            ($0.id, DashboardCoverage(intervals: [DateInterval(start: coverageStart, end: coverageEnd)], syncedAt: now))
+        })
+        return DashboardHistory(
+            username: "octocat",
+            repositories: repositories,
+            commits: commits.sorted { $0.date > $1.date },
+            coverage: coverage,
+            catalogUpdatedAt: now,
+            asOf: now
+        )
+    }()
+}
+
 enum DashboardHistoryStore {
     static func url() throws -> URL {
         let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,

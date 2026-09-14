@@ -28,7 +28,10 @@ struct RepositoryDashboardView: View {
     @State private var attemptedInitialSync = false
     @AppStorage("dashboard.favouriteRepositories") private var favouriteJSON = "[]"
 
-    private var history: DashboardHistory { github.dashboardHistory ?? DashboardHistory(username: github.username) }
+    private var isSample: Bool { !github.hasStoredToken }
+    private var history: DashboardHistory {
+        github.dashboardHistory ?? (isSample ? .sample : DashboardHistory(username: github.username))
+    }
     private var unit: DashboardRangeUnit { custom ? .custom : DashboardRangeUnit(rawValue: period.rawValue) ?? .weekly }
     private var now: Date { history.asOf ?? .now }
     private var range: DashboardDateRange {
@@ -75,10 +78,11 @@ struct RepositoryDashboardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                if isSample { sampleBanner }
                 header
                 dateControls
                 coverageCard
-                if github.hasStoredToken {
+                if github.hasStoredToken || isSample {
                     scopeControls
                     Picker("Dashboard view", selection: $tab) {
                         ForEach(["Overview", "Repositories", "Activity"], id: \.self) { Text($0) }
@@ -113,19 +117,35 @@ struct RepositoryDashboardView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("YOUR GITHUB ACTIVITY").font(.system(size: 10, weight: .bold, design: palette.fontDesign)).tracking(2)
                     .foregroundStyle(palette.green)
-                Text("@\(github.username)").font(.system(size: 28, weight: .heavy, design: palette.fontDesign))
-                Text(github.dashboardHistory == nil ? "Repository catalog not synced yet · your commits across all branches"
+                Text("@\(isSample ? history.username : github.username)").font(.system(size: 28, weight: .heavy, design: palette.fontDesign))
+                Text(isSample ? "Sample repositories · explore Gitlines before connecting"
+                     : github.dashboardHistory == nil ? "Repository catalog not synced yet · your commits across all branches"
                      : "\(history.repositories.count) accessible repositories · your commits across all branches")
                     .foregroundStyle(palette.muted)
             }
             Spacer(minLength: 12)
-            if github.isSyncingHistory {
+            if isSample {
+                Button("Connect GitHub", action: openConnections).buttonStyle(.borderedProminent)
+            } else if github.isSyncingHistory {
                 Button("Stop sync") { github.cancelHistorySync() }
             } else {
                 Button("Sync history", systemImage: "arrow.clockwise") { sync() }
                     .disabled(github.isBusy || !github.hasStoredToken || invalidCustomRange)
             }
         }
+    }
+
+    private var sampleBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "eye").font(.system(size: 15, weight: .bold)).foregroundStyle(palette.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SAMPLE DATA").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.8).foregroundStyle(palette.green)
+                Text("Connect GitHub when you're ready to replace this preview with your own activity.").foregroundStyle(palette.muted)
+            }
+            Spacer()
+            Button("Connect GitHub", action: openConnections)
+        }
+        .dashboardPanel(palette)
     }
 
     private var dateControls: some View {
@@ -177,7 +197,7 @@ struct RepositoryDashboardView: View {
                 Text("\(history.coveredCount(in: range.current, repositories: selected)) / \(repositoryCount) repositories synced for this period")
                     .fontWeight(.semibold)
                 Spacer()
-                Button("Manage access", action: openConnections)
+                Button(isSample ? "Connect GitHub" : "Manage access", action: openConnections)
             }
             if let updated = history.catalogUpdatedAt {
                 Text("Repository list updated \(updated, style: .relative) ago. Activity through \(now.formatted(date: .abbreviated, time: .shortened)).")

@@ -33,7 +33,7 @@ unregister_app() {
 }
 
 register_signed_app_if_available() {
-  local app_path="$signed_derived_data/Build/Products/$configuration/widtget.app"
+  local app_path="$signed_derived_data/Build/Products/$configuration/gitlines.app"
   if [[ -d "$app_path" ]] && codesign --verify "$app_path" >/dev/null 2>&1; then
     "$lsregister_path" -f -R -trusted "$app_path"
   fi
@@ -48,19 +48,19 @@ case "$action" in
       -derivedDataPath "$unsigned_derived_data" \
       CODE_SIGNING_ALLOWED=NO \
       build
-    unregister_app "$unsigned_derived_data/Build/Products/$configuration/widtget.app"
+    unregister_app "$unsigned_derived_data/Build/Products/$configuration/gitlines.app"
     register_signed_app_if_available
     ;;
   run)
     # A signed run registers the embedded WidgetKit extension with macOS.
     # -allowProvisioningUpdates renews the 7-day development profile, which otherwise expires
-    # and makes macOS refuse to launch the app ("The application \"widtget\" can't be opened.").
+    # and makes macOS refuse to launch the app ("The application \"gitlines\" can't be opened.").
     xcodebuild "${common_build_args[@]}" \
       -derivedDataPath "$signed_derived_data" \
       -allowProvisioningUpdates \
       build
 
-    app_path="$signed_derived_data/Build/Products/$configuration/widtget.app"
+    app_path="$signed_derived_data/Build/Products/$configuration/gitlines.app"
     if [[ ! -d "$app_path" ]]; then
       print -u2 "Built app was not found at: $app_path"
       exit 1
@@ -68,8 +68,8 @@ case "$action" in
 
     # Remove stale unsigned/legacy registrations that can otherwise win bundle-ID or URL-scheme
     # resolution and launch without the Keychain entitlement.
-    unregister_app "$unsigned_derived_data/Build/Products/$configuration/widtget.app"
-    unregister_app "$legacy_derived_data/Build/Products/$configuration/widtget.app"
+    unregister_app "$unsigned_derived_data/Build/Products/$configuration/gitlines.app"
+    unregister_app "$legacy_derived_data/Build/Products/$configuration/gitlines.app"
     "$lsregister_path" -f -R -trusted "$app_path"
 
     # `open` only activates an existing process for the same app. Restart both the host and its

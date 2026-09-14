@@ -279,6 +279,8 @@ enum SharedPreferences {
         static let showUpdateTime = "appearance.showUpdateTime"
         static let repositoryDetail = "appearance.repositoryDetail"
         static let periodWindowMode = "appearance.periodWindowMode"
+        static let dashboardPeriod = "dashboard.period"
+        static let dashboardTheme = "dashboard.theme"
         static let snakeCommitsPerBlock = "appearance.snakeCommitsPerBlock"
         static let paneOrder = "appearance.blockwork.paneOrder"
         static let enabledPanes = "appearance.blockwork.enabledPanes"

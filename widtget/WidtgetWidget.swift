@@ -34,7 +34,7 @@ struct WidtgetWidget: Widget {
                     WidgetContainerBackground(theme: entry.preferences.visualTheme)
                 }
         }
-        .configurationDisplayName("widtget")
+        .configurationDisplayName("Gitlines")
         .description("A focused view of additions, deletions, commits, and repository activity.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
         .contentMarginsDisabled()

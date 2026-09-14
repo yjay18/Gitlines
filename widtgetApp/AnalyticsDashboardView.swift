@@ -14,6 +14,7 @@ enum DashboardPalette {
 struct AnalyticsDashboardView: View {
     @Environment(\.themePalette) private var palette
     @ObservedObject var github: GitHubAccountModel
+    @Binding var period: ActivityPeriod
     @Binding var windowMode: PeriodWindowMode
     let openConnections: () -> Void
 
@@ -23,11 +24,10 @@ struct AnalyticsDashboardView: View {
         ZStack {
             DashboardBackdrop()
 
-            if let archive = github.activityArchive {
-                dashboard(archive: archive)
-            } else {
-                emptyState
-            }
+            dashboard(
+                archive: github.activityArchive ?? .sample,
+                isSample: github.activityArchive == nil
+            )
         }
         .foregroundStyle(palette.text)
         .onAppear {
@@ -41,21 +41,31 @@ struct AnalyticsDashboardView: View {
                 revealed = true
             }
         }
+        .onChange(of: period) { _, _ in
+            revealed = false
+            withAnimation(.spring(response: 0.72, dampingFraction: 0.82).delay(0.05)) {
+                revealed = true
+            }
+        }
     }
 
-    private func dashboard(archive: ActivitySnapshotArchive) -> some View {
-        let snapshot = archive.snapshot(for: .weekly, windowMode: windowMode)
-        let analytics = WeeklyDashboardAnalytics(snapshot: snapshot, windowMode: windowMode)
+    private func dashboard(archive: ActivitySnapshotArchive, isSample: Bool) -> some View {
+        let snapshot = archive.snapshot(for: period.storedPeriod, windowMode: windowMode)
+        let analytics = DashboardAnalytics(snapshot: snapshot, period: period, windowMode: windowMode)
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                dashboardHeader(archive: archive)
+                if isSample {
+                    sampleBanner
+                }
+
+                dashboardHeader(archive: archive, isSample: isSample)
 
                 HStack(spacing: 12) {
                     NumberCard(
                         label: "COMMITS",
                         value: snapshot.commits,
-                        suffix: "this week",
+                        suffix: analytics.spanLabel,
                         color: palette.text,
                         revealed: revealed
                     )
@@ -78,13 +88,13 @@ struct AnalyticsDashboardView: View {
                 }
 
                 HStack(alignment: .top, spacing: 12) {
-                    WeeklyPulseCard(analytics: analytics, revealed: revealed)
+                    PulseCard(analytics: analytics, revealed: revealed)
                         .frame(maxWidth: .infinity)
                     ChangeShapeCard(analytics: analytics, revealed: revealed)
                         .frame(width: 220)
                 }
 
-                WeeklyReviewCard(review: analytics.review, revealed: revealed)
+                ReviewCard(review: analytics.review, revealed: revealed)
 
                 RepositoryLedgerCard(analytics: analytics, revealed: revealed)
             }
@@ -92,19 +102,61 @@ struct AnalyticsDashboardView: View {
         }
     }
 
-    private func dashboardHeader(archive: ActivitySnapshotArchive) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("WEEKLY SIGNAL")
+    private var spanTitle: String {
+        let label = period.spanLabel(windowMode: windowMode)
+        return label.prefix(1).uppercased() + label.dropFirst()
+    }
+
+    private var sampleBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "eye")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(palette.green)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SAMPLE DATA")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .tracking(1.8)
                     .foregroundStyle(palette.green)
 
-                Text(github.username.isEmpty ? "Your activity" : "@\(github.username)")
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                Text("An example of what Gitlines shows. Connect GitHub to see your own activity.")
+                    .font(.system(size: 12, weight: .medium, design: palette.fontDesign))
+                    .foregroundStyle(palette.muted)
+            }
 
-                Text(windowMode == .fixed ? "This calendar week" : "The last seven days")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+            Spacer(minLength: 12)
+
+            Button("CONNECT GITHUB", action: openConnections)
+                .buttonStyle(DashboardCapsuleButtonStyle(palette: palette))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: min(14, palette.cornerRadius), style: .continuous)
+                .fill(palette.panel)
+                .overlay {
+                    RoundedRectangle(cornerRadius: min(14, palette.cornerRadius), style: .continuous)
+                        .stroke(palette.line, lineWidth: 1)
+                }
+        }
+    }
+
+    private func dashboardHeader(archive: ActivitySnapshotArchive, isSample: Bool) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(period.displayName) SIGNAL")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(1.8)
+                    .foregroundStyle(palette.green)
+
+                Text(isSample
+                     ? "@\(archive.username)"
+                     : (github.username.isEmpty ? "Your activity" : "@\(github.username)"))
+                    .font(.system(size: 30, weight: .heavy, design: palette.fontDesign))
+
+                Text(spanTitle)
+                    .font(.system(size: 12, weight: .medium, design: palette.fontDesign))
                     .foregroundStyle(palette.muted)
             }
 
@@ -112,13 +164,22 @@ struct AnalyticsDashboardView: View {
 
             VStack(alignment: .trailing, spacing: 5) {
                 HStack(spacing: 8) {
+                    Picker("Dashboard period", selection: $period) {
+                        ForEach(ActivityPeriod.allCases, id: \.self) { option in
+                            Text(option.rawValue.capitalized).tag(option)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 168)
+
                     Picker("Dashboard window", selection: $windowMode) {
                         Text("Calendar").tag(PeriodWindowMode.fixed)
                         Text("Rolling").tag(PeriodWindowMode.rolling)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(width: 150)
+                    .frame(width: 132)
 
                     Button {
                         Task { await github.refresh(scope: .allBranches) }
@@ -144,7 +205,7 @@ struct AnalyticsDashboardView: View {
                 }
 
                 Text("Saved \(archive.savedAt, style: .relative)")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .font(.system(size: 10, weight: .medium, design: palette.fontDesign))
                     .foregroundStyle(palette.muted)
             }
         }
@@ -153,10 +214,10 @@ struct AnalyticsDashboardView: View {
     private var emptyState: some View {
         VStack(spacing: 18) {
             ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                RoundedRectangle(cornerRadius: min(24, palette.cornerRadius), style: .continuous)
                     .fill(palette.panel)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        RoundedRectangle(cornerRadius: min(24, palette.cornerRadius), style: .continuous)
                             .stroke(palette.line, lineWidth: 1)
                     }
                 Image(systemName: "waveform.path.ecg")
@@ -166,10 +227,10 @@ struct AnalyticsDashboardView: View {
             .frame(width: 84, height: 84)
 
             VStack(spacing: 7) {
-                Text("No weekly signal yet")
-                    .font(.system(size: 25, weight: .heavy, design: .rounded))
-                Text("Connect GitHub once. widtget will build the dashboard from the same display-ready snapshots used by the widget.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                Text("No signal yet")
+                    .font(.system(size: 25, weight: .heavy, design: palette.fontDesign))
+                Text("Connect GitHub once. Gitlines will build the dashboard from the same display-ready snapshots used by the widget.")
+                    .font(.system(size: 12, weight: .medium, design: palette.fontDesign))
                     .foregroundStyle(palette.muted)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
@@ -184,6 +245,7 @@ struct AnalyticsDashboardView: View {
 
 struct BlockworkAnalyticsDashboardView: View {
     @ObservedObject var github: GitHubAccountModel
+    @Binding var period: ActivityPeriod
     @Binding var windowMode: PeriodWindowMode
     let openConnections: () -> Void
 
@@ -196,25 +258,28 @@ struct BlockworkAnalyticsDashboardView: View {
 
     var body: some View {
         Group {
-            if let archive = github.activityArchive {
-                dashboard(archive)
-            } else {
-                emptyState
-            }
+            dashboard(
+                github.activityArchive ?? .sample,
+                isSample: github.activityArchive == nil
+            )
         }
         .background(field)
     }
 
-    private func dashboard(_ archive: ActivitySnapshotArchive) -> some View {
-        let snapshot = archive.snapshot(for: .weekly, windowMode: windowMode)
-        let analytics = WeeklyDashboardAnalytics(snapshot: snapshot, windowMode: windowMode)
+    private func dashboard(_ archive: ActivitySnapshotArchive, isSample: Bool) -> some View {
+        let snapshot = archive.snapshot(for: period.storedPeriod, windowMode: windowMode)
+        let analytics = DashboardAnalytics(snapshot: snapshot, period: period, windowMode: windowMode)
 
         return ScrollView {
             VStack(spacing: 4) {
-                header(archive)
+                if isSample {
+                    sampleBanner
+                }
+
+                header(archive, isSample: isSample)
 
                 HStack(spacing: 4) {
-                    metricTile("COMMITS", snapshot.commits.formatted(), detail: "THIS WEEK", fill: lime)
+                    metricTile("COMMITS", snapshot.commits.formatted(), detail: analytics.spanLabel.uppercased(), fill: lime)
                     metricTile("LINES MADE", ActivityNumberFormat.exact(snapshot.additions, sign: "+"), detail: "ADDITIONS", fill: orange)
                     metricTile("LINES REMOVED", ActivityNumberFormat.exact(snapshot.deletions, sign: "−"), detail: "DELETIONS", fill: ink, light: true)
                 }
@@ -233,44 +298,89 @@ struct BlockworkAnalyticsDashboardView: View {
         }
     }
 
-    private func header(_ archive: ActivitySnapshotArchive) -> some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("WEEKLY OUTPUT / BLOCKWORK")
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundStyle(orange)
-                Text(github.username.isEmpty ? "Your activity" : "@\(github.username)")
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                    .tracking(-1.2)
+    private var sampleBanner: some View {
+        HStack(spacing: 12) {
+            Text("SAMPLE DATA")
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(ink)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(lime)
+
+            Text("An example of what Gitlines shows. Connect GitHub to see your own activity.")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(paper)
+
+            Spacer(minLength: 12)
+
+            Button("CONNECT GITHUB", action: openConnections)
+                .buttonStyle(.plain)
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .padding(.horizontal, 12)
+                .frame(height: 26)
+                .foregroundStyle(ink)
+                .background(lime)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ink)
+    }
+
+    private func header(_ archive: ActivitySnapshotArchive, isSample: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(period.displayName) OUTPUT / BLOCKWORK")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .tracking(1.2)
+                        .foregroundStyle(orange)
+                    Text(isSample
+                         ? "@\(archive.username)"
+                         : (github.username.isEmpty ? "Your activity" : "@\(github.username)"))
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .tracking(-1.2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                Spacer(minLength: 12)
+                Text("SAVED \(archive.savedAt, style: .relative)")
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                    .foregroundStyle(paper.opacity(0.58))
             }
+            HStack(spacing: 12) {
+                Picker("Dashboard period", selection: $period) {
+                    ForEach(ActivityPeriod.allCases, id: \.self) { option in
+                        Text(option.rawValue.capitalized).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 168)
 
-            Spacer()
+                Picker("Dashboard window", selection: $windowMode) {
+                    Text("Calendar").tag(PeriodWindowMode.fixed)
+                    Text("Rolling").tag(PeriodWindowMode.rolling)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 132)
 
-            Picker("Dashboard window", selection: $windowMode) {
-                Text("Calendar").tag(PeriodWindowMode.fixed)
-                Text("Rolling").tag(PeriodWindowMode.rolling)
+                Spacer(minLength: 0)
+
+                Button {
+                    Task { await github.refresh(scope: .allBranches) }
+                } label: {
+                    Label(github.isBusy ? "REFRESHING" : "REFRESH", systemImage: "arrow.clockwise")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .padding(.horizontal, 11)
+                        .frame(height: 30)
+                        .foregroundStyle(ink)
+                        .background(lime)
+                }
+                .buttonStyle(.plain)
+                .disabled(github.isBusy)
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 150)
-
-            Button {
-                Task { await github.refresh(scope: .allBranches) }
-            } label: {
-                Label(github.isBusy ? "REFRESHING" : "REFRESH", systemImage: "arrow.clockwise")
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
-                    .padding(.horizontal, 11)
-                    .frame(height: 30)
-                    .foregroundStyle(ink)
-                    .background(lime)
-            }
-            .buttonStyle(.plain)
-            .disabled(github.isBusy)
-
-            Text("SAVED \(archive.savedAt, style: .relative)")
-                .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(paper.opacity(0.58))
         }
         .padding(18)
         .foregroundStyle(paper)
@@ -307,7 +417,7 @@ struct BlockworkAnalyticsDashboardView: View {
         .background(fill)
     }
 
-    private func activityTile(_ analytics: WeeklyDashboardAnalytics) -> some View {
+    private func activityTile(_ analytics: DashboardAnalytics) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 blockLabel("ACTIVITY / \(analytics.snapshot.activity.count) INTERVALS")
@@ -328,8 +438,8 @@ struct BlockworkAnalyticsDashboardView: View {
                                     .frame(height: max(3, proxy.size.height * ratio))
                             }
                         }
-                        Text(analytics.intervalLabels.indices.contains(index)
-                             ? analytics.intervalLabels[index].prefix(2).uppercased()
+                        Text(analytics.axisLabels.indices.contains(index)
+                             ? analytics.axisLabels[index].uppercased()
                              : "\(index + 1)")
                             .font(.system(size: 7, weight: .black, design: .monospaced))
                     }
@@ -356,7 +466,7 @@ struct BlockworkAnalyticsDashboardView: View {
         .background(sky)
     }
 
-    private func reviewTile(_ review: WeeklyDashboardAnalytics.Review) -> some View {
+    private func reviewTile(_ review: DashboardAnalytics.Review) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             blockLabel(review.eyebrow)
             Text(review.title)
@@ -367,7 +477,7 @@ struct BlockworkAnalyticsDashboardView: View {
                 .lineSpacing(3)
                 .foregroundStyle(ink.opacity(0.68))
             Spacer(minLength: 0)
-            Text("DETERMINISTIC / WEEKLY")
+            Text("DETERMINISTIC / \(period.displayName)")
                 .font(.system(size: 7, weight: .black, design: .monospaced))
                 .padding(7)
                 .background(orange)
@@ -433,7 +543,7 @@ struct BlockworkAnalyticsDashboardView: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Text("NO WEEKLY OUTPUT")
+            Text("NO OUTPUT YET")
                 .font(.system(size: 10, weight: .black, design: .monospaced))
                 .tracking(1)
             Text("Connect GitHub to assemble the dashboard.")
@@ -467,14 +577,14 @@ private struct NumberCard: View {
             DashboardLabel(label)
             Spacer(minLength: 0)
             Text(revealed ? "\(prefix)\(value.formatted())" : "\(prefix)0")
-                .font(.system(size: 31, weight: .heavy, design: .rounded))
+                .font(.system(size: 31, weight: .heavy, design: palette.fontDesign))
                 .monospacedDigit()
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.62)
                 .contentTransition(.numericText())
             Text(suffix)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(.system(size: 10, weight: .semibold, design: palette.fontDesign))
                 .foregroundStyle(palette.muted)
         }
         .padding(16)
@@ -483,9 +593,9 @@ private struct NumberCard: View {
     }
 }
 
-private struct WeeklyPulseCard: View {
+private struct PulseCard: View {
     @Environment(\.themePalette) private var palette
-    let analytics: WeeklyDashboardAnalytics
+    let analytics: DashboardAnalytics
     let revealed: Bool
 
     var body: some View {
@@ -518,10 +628,10 @@ private struct WeeklyPulseCard: View {
                                         .fill(palette.line)
                                         .frame(height: 3)
                                 } else {
-                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    RoundedRectangle(cornerRadius: min(3, palette.cornerRadius), style: .continuous)
                                         .fill(palette.green.opacity(0.92))
                                         .frame(height: max(2, available * additionRatio))
-                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    RoundedRectangle(cornerRadius: min(3, palette.cornerRadius), style: .continuous)
                                         .fill(palette.coral.opacity(0.88))
                                         .frame(height: max(2, available * deletionRatio))
                                 }
@@ -534,8 +644,8 @@ private struct WeeklyPulseCard: View {
                             )
                         }
 
-                        Text(analytics.intervalLabels.indices.contains(index)
-                             ? analytics.intervalLabels[index].prefix(2).uppercased()
+                        Text(analytics.axisLabels.indices.contains(index)
+                             ? analytics.axisLabels[index].uppercased()
                              : "\(index + 1)")
                             .font(.system(size: 8, weight: .bold, design: .monospaced))
                             .foregroundStyle(palette.muted)
@@ -562,7 +672,7 @@ private struct WeeklyPulseCard: View {
 
 private struct ChangeShapeCard: View {
     @Environment(\.themePalette) private var palette
-    let analytics: WeeklyDashboardAnalytics
+    let analytics: DashboardAnalytics
     let revealed: Bool
 
     var body: some View {
@@ -572,7 +682,7 @@ private struct ChangeShapeCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(analytics.percentage(1 - analytics.deletionShare))
-                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .font(.system(size: 28, weight: .heavy, design: palette.fontDesign))
                         .monospacedDigit()
                         .foregroundStyle(palette.green)
                     Text("IN")
@@ -582,12 +692,12 @@ private struct ChangeShapeCard: View {
                 }
 
                 Text("/")
-                    .font(.system(size: 24, weight: .light, design: .rounded))
+                    .font(.system(size: 24, weight: .light, design: palette.fontDesign))
                     .foregroundStyle(palette.line)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(analytics.percentage(analytics.deletionShare))
-                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .font(.system(size: 28, weight: .heavy, design: palette.fontDesign))
                         .monospacedDigit()
                         .foregroundStyle(palette.coral)
                     Text("OUT")
@@ -601,10 +711,10 @@ private struct ChangeShapeCard: View {
                 let additionShare = CGFloat(1 - analytics.deletionShare)
                 let availableWidth = max(0, proxy.size.width - 3)
                 HStack(spacing: 3) {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: min(6, palette.cornerRadius), style: .continuous)
                         .fill(palette.green)
                         .frame(width: revealed ? availableWidth * additionShare : 3)
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: min(6, palette.cornerRadius), style: .continuous)
                         .fill(palette.coral)
                         .frame(maxWidth: .infinity)
                 }
@@ -618,7 +728,7 @@ private struct ChangeShapeCard: View {
                             context.stroke(path, with: .color(palette.ink.opacity(0.22)), lineWidth: 1)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: min(6, palette.cornerRadius), style: .continuous))
                 }
             }
             .frame(height: 52)
@@ -631,7 +741,7 @@ private struct ChangeShapeCard: View {
             Spacer(minLength: 0)
 
             Text("Describes the mix of changed lines—not code quality or productivity.")
-                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .font(.system(size: 9, weight: .medium, design: palette.fontDesign))
                 .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -641,9 +751,9 @@ private struct ChangeShapeCard: View {
     }
 }
 
-private struct WeeklyReviewCard: View {
+private struct ReviewCard: View {
     @Environment(\.themePalette) private var palette
-    let review: WeeklyDashboardAnalytics.Review
+    let review: DashboardAnalytics.Review
     let revealed: Bool
 
     var body: some View {
@@ -658,13 +768,13 @@ private struct WeeklyReviewCard: View {
             }
 
             Text(review.title)
-                .font(.system(size: 27, weight: .heavy, design: .rounded))
+                .font(.system(size: 27, weight: .heavy, design: palette.fontDesign))
                 .foregroundStyle(palette.text)
                 .offset(y: revealed ? 0 : 8)
                 .opacity(revealed ? 1 : 0)
 
             Text(review.summary)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.system(size: 13, weight: .medium, design: palette.fontDesign))
                 .foregroundStyle(palette.muted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -686,7 +796,7 @@ private struct WeeklyReviewCard: View {
         .padding(20)
         .background {
             ZStack(alignment: .trailing) {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: min(18, palette.cornerRadius), style: .continuous)
                     .fill(palette.panel)
                 Rectangle()
                     .fill(palette.green.opacity(0.8))
@@ -694,9 +804,9 @@ private struct WeeklyReviewCard: View {
                     .padding(.vertical, 18)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: min(18, palette.cornerRadius), style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: min(18, palette.cornerRadius), style: .continuous)
                 .stroke(palette.line, lineWidth: 1)
         }
     }
@@ -704,7 +814,7 @@ private struct WeeklyReviewCard: View {
 
 private struct RepositoryLedgerCard: View {
     @Environment(\.themePalette) private var palette
-    let analytics: WeeklyDashboardAnalytics
+    let analytics: DashboardAnalytics
     let revealed: Bool
 
     var body: some View {
@@ -720,7 +830,7 @@ private struct RepositoryLedgerCard: View {
 
             if analytics.snapshot.repositories.isEmpty {
                 Text("No active repositories in this window.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.system(size: 12, weight: .medium, design: palette.fontDesign))
                     .foregroundStyle(palette.muted)
                     .padding(.vertical, 16)
             } else {
@@ -758,7 +868,7 @@ private struct RepositoryLedgerRow: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text(repository.name)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(size: 12, weight: .bold, design: palette.fontDesign))
                         .lineLimit(1)
                     Text("\(repository.commits)c")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -796,7 +906,7 @@ private struct RepositoryLedgerRow: View {
 
 private struct ReviewNoteView: View {
     @Environment(\.themePalette) private var palette
-    let note: WeeklyDashboardAnalytics.Review.Note
+    let note: DashboardAnalytics.Review.Note
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -805,17 +915,17 @@ private struct ReviewNoteView: View {
                 .tracking(1)
                 .foregroundStyle(noteColor)
             Text(note.value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(size: 14, weight: .bold, design: palette.fontDesign))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             Text(note.detail)
-                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .font(.system(size: 9, weight: .medium, design: palette.fontDesign))
                 .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-        .background(palette.lifted.opacity(0.64), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(palette.lifted.opacity(0.64), in: RoundedRectangle(cornerRadius: min(12, palette.cornerRadius), style: .continuous))
     }
 
     private var noteColor: Color {
@@ -837,10 +947,10 @@ private struct PulseStat: View {
         VStack(alignment: .leading, spacing: 2) {
             DashboardLabel(label)
             Text(value)
-                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                .font(.system(size: 17, weight: .heavy, design: palette.fontDesign))
                 .monospacedDigit()
             Text(detail)
-                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                .font(.system(size: 8, weight: .semibold, design: palette.fontDesign))
                 .foregroundStyle(palette.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -857,7 +967,7 @@ private struct ShapeLegend: View {
         HStack(spacing: 7) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(.system(size: 10, weight: .semibold, design: palette.fontDesign))
                 .foregroundStyle(palette.muted)
             Spacer()
             Text(value.formatted())
@@ -907,9 +1017,9 @@ private struct DashboardSurfaceModifier: ViewModifier {
     @Environment(\.themePalette) private var palette
     func body(content: Content) -> some View {
         content
-            .background(palette.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(palette.panel, in: RoundedRectangle(cornerRadius: min(16, palette.cornerRadius), style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: min(16, palette.cornerRadius), style: .continuous)
                     .stroke(palette.line, lineWidth: 1)
             }
     }

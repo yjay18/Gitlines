@@ -1,10 +1,10 @@
-# widtget development guide
+# Gitlines development guide
 
 ## Product boundary
 
-- `widtget` is a native macOS WidgetKit product with a deliberately small host app.
+- `Gitlines` is a native macOS WidgetKit product with a deliberately small host app.
 - Keep the widget as the primary product. The host app only manages shared widget preferences and credentials/data refresh when live GitHub data is added.
-- The misspelling `widtget` is the intentional product and target name. Do not rename it to `widget` or `GitPulse`.
+- The public product and app name is `Gitlines`. The existing `widtget` project, schemes, target names, bundle identifiers, App Group, Keychain service, and refresh URL scheme are compatibility identifiers; do not rename them without an explicit migration plan.
 - Preserve the dark, number-first visual hierarchy and native Daily/Weekly/Monthly App Intent configuration. The widget period pill cycles daily → weekly → monthly; monthly activity is bucketed week by week (five cells, labelled W1–W5) and its peak/active/average analytics read from those week cells. Every theme renders periods through the shared `ActivityIntervalLabels`, so new periods flow to all themes and sizes automatically.
 
 ## Xcode project
@@ -12,6 +12,7 @@
 - Project: `widtget.xcodeproj`
 - Host app scheme: `widtget app`
 - Widget extension scheme: `widtget`
+- Built host app: `gitlines.app`
 - Deployment target: macOS 14+
 - App bundle ID: `com.yjay18.widtget`
 - Widget bundle ID: `com.yjay18.widtget.widget`

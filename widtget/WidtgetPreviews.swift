@@ -31,3 +31,24 @@ import WidgetKit
     ActivityEntry(date: .now, configuredPeriod: .daily, period: .daily, username: "yjay18", snapshot: .loading)
     ActivityEntry(date: .now, configuredPeriod: .daily, period: .daily, username: "yjay18", snapshot: .error)
 }
+
+#Preview("Blockwork · Extra Large · Monthly", as: .systemExtraLarge) {
+    WidtgetWidget()
+} timeline: {
+    ActivityEntry(
+        date: .now,
+        configuredPeriod: .monthly,
+        period: .monthly,
+        username: "yjay18",
+        snapshot: .monthly,
+        preferences: .blockworkPreview
+    )
+}
+
+private extension WidgetViewPreferences {
+    static var blockworkPreview: WidgetViewPreferences {
+        var preferences = WidgetViewPreferences.defaults
+        preferences.visualTheme = .blockwork
+        return preferences
+    }
+}

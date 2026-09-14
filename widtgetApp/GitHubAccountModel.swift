@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import WidgetKit
@@ -25,13 +26,38 @@ final class GitHubAccountModel: ObservableObject {
     @Published private(set) var tokenCount = 0
     @Published private(set) var connections: [GitHubConnectionSummary] = []
     @Published private(set) var activityArchive: ActivitySnapshotArchive?
+    @Published private(set) var dashboardHistory: DashboardHistory?
+    @Published private(set) var isSyncingHistory = false
+    @Published private(set) var historyProgress = ""
+    @Published private(set) var historyCompleted = 0
+    @Published private(set) var historyTotal = 0
+    @Published private(set) var historyError: String?
+    @Published private(set) var historyRetryAt: Date?
+    private var historyRetryTask: Task<Void, Never>?
+    private var historyTask: Task<Void, Never>?
+    private var historySyncID: UUID?
+
+
+    @Published private(set) var deviceAuthorization: GitHubDeviceAuthorization?
+    @Published private(set) var isSigningIn = false
+    @Published private(set) var signInStatus: String?
+    private var signInTask: Task<Void, Never>?
+    private var signInID: UUID?
+    private let signInService = GitHubSignInService()
+
+    var usesGitHubSignIn: Bool {
+        storedConnections.contains { $0.kind == .account && $0.oauth != nil }
+    }
 
     private let service: GitHubActivityService
+    private let isSampleSession: Bool
     private var didBootstrap = false
     private var storedConnections: [GitHubStoredConnection] = []
 
     init(service: GitHubActivityService = GitHubActivityService()) {
         self.service = service
+        isSampleSession = ProcessInfo.processInfo.arguments.contains("--sample-data")
+        guard !isSampleSession else { return }
         username = SharedPreferences.defaults.string(forKey: SharedPreferences.Key.githubUsername) ?? ""
         lastRefresh = SharedPreferences.defaults.object(
             forKey: SharedPreferences.Key.lastSuccessfulRefresh
@@ -39,7 +65,7 @@ final class GitHubAccountModel: ObservableObject {
     }
 
     var isBusy: Bool {
-        phase == .connecting || phase == .refreshing
+        phase == .connecting || phase == .refreshing || isSyncingHistory
     }
 
     var canConnect: Bool {
@@ -71,6 +97,13 @@ final class GitHubAccountModel: ObservableObject {
         guard !didBootstrap else { return }
         didBootstrap = true
 
+        // Keeps App Store screenshots and demos free of the owner's private repository data.
+        // A normal first launch reaches the same disconnected sample state without this flag.
+        guard !isSampleSession else {
+            phase = .disconnected
+            return
+        }
+
         let refreshRequested = SharedPreferences.defaults.bool(
             forKey: SharedPreferences.Key.githubRefreshRequested
         )
@@ -90,6 +123,10 @@ final class GitHubAccountModel: ObservableObject {
             try GitHubTokenStore.replace(with: loadedConnections)
             storedConnections = loadedConnections
             syncConnectionState()
+            if let cached = try? DashboardHistoryStore.read(),
+               cached.username.caseInsensitiveCompare(loadedConnections.first?.owner ?? "") == .orderedSame {
+                dashboardHistory = cached
+            }
             phase = .connected
 
             let archive = try ActivitySnapshotStore.read()
@@ -105,7 +142,7 @@ final class GitHubAccountModel: ObservableObject {
                 $0.daily.state == .error || $0.weekly.state == .error
             } ?? false
             if refreshRequested || cachedRefreshFailed || refreshAge > 15 * 60 {
-                await refresh(using: loadedConnections.map(\.token), scope: .recentBranches)
+                await refreshConnections(scope: .recentBranches)
             }
         } catch {
             phase = .failed
@@ -130,6 +167,102 @@ final class GitHubAccountModel: ObservableObject {
 
         SharedPreferences.defaults.removeObject(forKey: SharedPreferences.Key.githubRefreshRequested)
         await refresh(scope: .recentBranches)
+    }
+
+    func beginSignIn() {
+        guard !isBusy else { return }
+        let id = UUID()
+        signInID = id
+        isSigningIn = true
+        phase = .connecting
+        message = nil
+        notice = nil
+        signInStatus = "Requesting a GitHub sign-in code…"
+        signInTask = Task { [weak self] in
+            await self?.performSignIn(id: id)
+        }
+    }
+
+    func cancelSignIn() {
+        signInTask?.cancel()
+        signInTask = nil
+        signInID = nil
+        deviceAuthorization = nil
+        isSigningIn = false
+        signInStatus = "Sign-in cancelled."
+        phase = hasStoredToken ? .connected : .disconnected
+    }
+
+    func openGitHubSignIn() {
+        guard let device = deviceAuthorization else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(device.userCode, forType: .string)
+        NSWorkspace.shared.open(device.verificationURL)
+    }
+
+    private func performSignIn(id: UUID) async {
+        defer {
+            if signInID == id {
+                signInID = nil
+                signInTask = nil
+                deviceAuthorization = nil
+                isSigningIn = false
+            }
+        }
+        do {
+            let device = try await signInService.begin(clientID: GitHubSignInConfiguration.clientID)
+            try Task.checkCancellation()
+            guard signInID == id else { return }
+            deviceAuthorization = device
+            signInStatus = "Waiting for approval on GitHub…"
+            let credential = try await signInService.authorize(device, clientID: GitHubSignInConfiguration.clientID)
+            try Task.checkCancellation()
+            guard signInID == id else { return }
+            deviceAuthorization = nil
+            signInStatus = "GitHub approved sign-in. Verifying your account…"
+            let identity = try await service.username(token: credential.accessToken)
+            let existing = try GitHubTokenStore.readConnections(defaultUsername: username)
+            if let account = existing.first(where: { $0.kind == .account }),
+               identity.caseInsensitiveCompare(account.owner) != .orderedSame {
+                throw GitHubActivityError.tokenAccountMismatch
+            }
+            // Repository discovery is a separate sync operation. A failed or empty
+            // repository response must not discard an approved account sign-in.
+            let connection = GitHubStoredConnection(
+                id: existing.first(where: { $0.kind == .account })?.id ?? UUID(),
+                owner: identity, kind: .account, token: credential.accessToken,
+                repositoryCount: nil,
+                privateRepositoryCount: nil,
+                validatedAt: .now, oauth: credential.session
+            )
+            // Keep manually connected organizations until the user chooses to remove them.
+            let updated = [connection] + existing.filter { $0.kind == .organization }
+            try Task.checkCancellation()
+            guard signInID == id else { return }
+            try GitHubTokenStore.replace(with: updated)
+            storedConnections = updated
+            username = identity
+            syncConnectionState()
+            tokenInput = ""
+            replacementAccountTokenInput = ""
+            // Sign-in is committed. Refresh is a separate operation and cannot undo it.
+            signInID = nil
+            signInTask = nil
+            isSigningIn = false
+            signInStatus = "Connected to GitHub as @\(identity)."
+            notice = "Signed in with GitHub. Repository access can be changed on GitHub at any time."
+            await refreshConnectionMetadata()
+            await refreshConnections(scope: .allBranches)
+        } catch {
+            guard signInID == id else { return }
+            if error is CancellationError {
+                phase = hasStoredToken ? .connected : .disconnected
+            } else {
+                phase = .failed
+                message = error.localizedDescription
+                signInStatus = "GitHub sign-in was not saved: \(error.localizedDescription)"
+            }
+        }
     }
 
     func connect() async {
@@ -178,9 +311,7 @@ final class GitHubAccountModel: ObservableObject {
         notice = nil
 
         do {
-            let existing = storedConnections.isEmpty
-                ? try GitHubTokenStore.readConnections(defaultUsername: username)
-                : storedConnections
+            let existing = try await renewCredentialsIfNeeded()
             guard !existing.contains(where: { $0.token == token }) else {
                 phase = .connected
                 message = "This token is already connected."
@@ -240,9 +371,7 @@ final class GitHubAccountModel: ObservableObject {
         notice = nil
 
         do {
-            let existing = storedConnections.isEmpty
-                ? try GitHubTokenStore.readConnections(defaultUsername: username)
-                : storedConnections
+            let existing = try await renewCredentialsIfNeeded()
             guard let currentAccount = existing.first(where: { $0.kind == .account }) else {
                 phase = .disconnected
                 message = "Connect a GitHub account before replacing its token."
@@ -282,7 +411,7 @@ final class GitHubAccountModel: ObservableObject {
             try persist(archive)
             replacementAccountTokenInput = ""
             phase = .connected
-            notice = "Account token replaced. \(inspection.repositoryCount) repositories, including \(inspection.privateRepositoryCount) private, are available to widtget."
+            notice = "Account token replaced. \(inspection.repositoryCount) repositories, including \(inspection.privateRepositoryCount) private, are available to Gitlines."
         } catch {
             phase = .failed
             message = error.localizedDescription
@@ -303,7 +432,7 @@ final class GitHubAccountModel: ObservableObject {
             storedConnections = remaining
             syncConnectionState()
             notice = "\(connection.owner) was removed."
-            await refresh(using: remaining.map(\.token), scope: .allBranches)
+            await refreshConnections(scope: .allBranches)
         } catch {
             phase = .failed
             message = error.localizedDescription
@@ -311,6 +440,8 @@ final class GitHubAccountModel: ObservableObject {
     }
 
     func refresh(scope: GitHubRefreshScope = .recentBranches) async {
+        guard !isBusy else { return }
+        phase = .refreshing
         do {
             let loadedConnections = storedConnections.isEmpty
                 ? try GitHubTokenStore.readConnections(defaultUsername: username)
@@ -323,14 +454,86 @@ final class GitHubAccountModel: ObservableObject {
             }
             storedConnections = loadedConnections
             syncConnectionState()
-            await refresh(using: loadedConnections.map(\.token), scope: scope)
+            await refreshConnections(scope: scope)
         } catch {
             phase = .failed
             message = error.localizedDescription
         }
     }
 
+    func syncDashboardHistory(range: DateInterval) {
+        guard !isBusy, hasStoredToken else { return }
+        historyRetryTask?.cancel()
+        historyRetryTask = nil
+        historyRetryAt = nil
+        let syncID = UUID()
+        historySyncID = syncID
+        isSyncingHistory = true
+        historyError = nil
+        historyProgress = "Loading repositories…"
+        historyCompleted = 0
+        historyTotal = 0
+        historyTask = Task {
+            defer { if historySyncID == syncID { isSyncingHistory = false; historyTask = nil; historySyncID = nil } }
+            do {
+                let connections = try await renewCredentialsIfNeeded()
+                let result = try await service.fetchDashboardHistory(
+                    tokens: connections.map(\.token), range: range, existing: dashboardHistory
+                ) { [weak self] history, status, completed, total in
+                    await self?.acceptHistoryProgress(history, syncID: syncID, status: status, completed: completed, total: total)
+                }
+                try Task.checkCancellation()
+                guard historySyncID == syncID else { return }
+                dashboardHistory = result
+                try DashboardHistoryStore.write(result)
+                let failed = result.coverage.values.filter { $0.error != nil }.count
+                historyProgress = failed == 0 ? "Sync complete" : "Sync finished with \(failed) repository errors"
+            } catch is CancellationError {
+                historyProgress = "Sync stopped. Completed repositories are saved."
+            } catch {
+                historyError = error.localizedDescription
+                historyProgress = "Sync incomplete"
+                if case GitHubActivityError.rateLimited(let reset) = error, let reset {
+                    let retryAt = max(reset.addingTimeInterval(3), Date().addingTimeInterval(5))
+                    historyRetryAt = retryAt
+                    historyProgress = "Sync paused. It will resume after GitHub's API limit resets."
+                    historyRetryTask = Task { [weak self] in
+                        do { try await Task.sleep(for: .seconds(max(1, retryAt.timeIntervalSinceNow))) }
+                        catch { return }
+                        guard let self else { return }
+                        while self.isBusy {
+                            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                        }
+                        guard self.hasStoredToken, !Task.isCancelled else { return }
+                        self.syncDashboardHistory(range: range)
+                    }
+                }
+            }
+        }
+    }
+
+    private func acceptHistoryProgress(_ history: DashboardHistory, syncID: UUID, status: String, completed: Int, total: Int) {
+        guard historySyncID == syncID, !Task.isCancelled else { return }
+        dashboardHistory = history
+        historyProgress = status
+        historyCompleted = completed
+        historyTotal = total
+        do { try DashboardHistoryStore.write(history) }
+        catch { historyError = "Could not save dashboard history: \(error.localizedDescription)" }
+    }
+
+    func cancelHistorySync() {
+        historyTask?.cancel()
+        historyRetryTask?.cancel()
+        historyRetryTask = nil
+        historyRetryAt = nil
+    }
+
     func disconnect() {
+        cancelHistorySync()
+        historySyncID = nil
+        isSyncingHistory = false
+        if isSigningIn { cancelSignIn() }
         do {
             try GitHubTokenStore.remove()
         } catch {
@@ -342,6 +545,7 @@ final class GitHubAccountModel: ObservableObject {
         let cacheRemovalError: Error?
         do {
             try ActivitySnapshotStore.remove()
+            try DashboardHistoryStore.remove()
             cacheRemovalError = nil
         } catch {
             cacheRemovalError = error
@@ -352,8 +556,11 @@ final class GitHubAccountModel: ObservableObject {
         SharedPreferences.defaults.removeObject(forKey: SharedPreferences.Key.githubRefreshRequested)
         GitHubBranchCache.remove()
         username = ""
+        signInStatus = nil
         lastRefresh = nil
         activityArchive = nil
+        dashboardHistory = nil
+        historyError = nil
         storedConnections = []
         syncConnectionState()
         tokenInput = ""
@@ -366,12 +573,13 @@ final class GitHubAccountModel: ObservableObject {
         reloadWidgets()
     }
 
-    private func refresh(using tokens: [String], scope: GitHubRefreshScope) async {
+    private func refreshConnections(scope: GitHubRefreshScope) async {
         phase = .refreshing
         message = nil
 
         do {
-            let archive = try await service.fetchSnapshots(tokens: tokens, scope: scope)
+            let fresh = try await renewCredentialsIfNeeded()
+            let archive = try await service.fetchSnapshots(tokens: fresh.map(\.token), scope: scope)
             if case .allBranches = scope {
                 await refreshConnectionMetadata()
             }
@@ -388,6 +596,32 @@ final class GitHubAccountModel: ObservableObject {
             phase = .failed
             message = userMessage
         }
+    }
+
+    private func renewCredentialsIfNeeded() async throws -> [GitHubStoredConnection] {
+        var fresh = try GitHubTokenStore.readConnections(defaultUsername: username)
+        for index in fresh.indices {
+            guard let oauth = fresh[index].oauth,
+                  oauth.expiresAt.timeIntervalSinceNow < 60 else { continue }
+            let credentials = try await signInService.refresh(oauth)
+            let old = fresh[index]
+            fresh[index] = GitHubStoredConnection(
+                id: old.id, owner: old.owner, kind: old.kind, token: credentials.accessToken,
+                repositoryCount: old.repositoryCount, privateRepositoryCount: old.privateRepositoryCount,
+                validatedAt: old.validatedAt, oauth: credentials.session
+            )
+            // GitHub invalidates the old refresh token immediately. Save its replacement
+            // before fetching anything else, even if a later API request fails.
+            try GitHubTokenStore.replace(with: fresh)
+            storedConnections = fresh
+            let identity = try await service.username(token: credentials.accessToken)
+            guard identity.caseInsensitiveCompare(old.owner) == .orderedSame else {
+                throw GitHubActivityError.tokenAccountMismatch
+            }
+        }
+        storedConnections = fresh
+        syncConnectionState()
+        return fresh
     }
 
     private func refreshConnectionMetadata() async {
@@ -411,7 +645,8 @@ final class GitHubAccountModel: ObservableObject {
                     token: connection.token,
                     repositoryCount: inspection.repositoryCount,
                     privateRepositoryCount: inspection.privateRepositoryCount,
-                    validatedAt: .now
+                    validatedAt: .now,
+                    oauth: connection.oauth
                 )
             )
         }

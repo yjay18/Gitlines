@@ -33,10 +33,11 @@ Gitlines is a native macOS WidgetKit app. The widget shows exact commits, additi
 - **Calendar or rolling windows**: today, this week, this month, or the last 24 hours, 7 days, 30 days.
 - **Real numbers**: commits, additions, deletions, net change, active intervals, peak activity, averages and repository rankings, from GitHub's per-commit statistics.
 - **Every branch**: discovers recent work beyond the default branch and deduplicates commits that appear on more than one.
-- **Personal and organization repositories**, each connected with its own fine-grained read-only token.
+- **Personal and organization repositories** through GitHub sign-in, with optional fine-grained read-only tokens for separate organization access.
 - **Four widget sizes** with purpose-built small, medium, large and extra-large layouts.
 - **A theme per mood**, each rendering the identical snapshot. Changing the look never changes the numbers.
-- **Snapshot dashboard** in the host app: activity pulse, change shape, rhythm, repository ledger and a plain-language review.
+- **Historical dashboard** with daily, weekly, monthly and custom periods, equivalent-period comparisons, an activity calendar and switchable commit/line charts.
+- **Repository explorer** with search, filters, favourites, detail views, commit history and side-by-side comparison.
 - **Resilient refreshes**: configurable timing, lightweight widget refreshes, cached results, stale-data indicators and retry states.
 - **A commit snek** that grows one segment per commit. Its states are `smol snek`, `growing snek` and `snek happy`.
 
@@ -56,7 +57,7 @@ The Widget Studio in the host app previews every size live, sets a global theme 
 ## Requirements
 
 - macOS 14 or newer (native App Intent widget configuration and interactive retry).
-- A GitHub account and a fine-grained personal access token with **Contents: read-only**.
+- A GitHub account. Manual fine-grained personal access tokens with **Contents: read-only** are optional for separate organization access.
 - To build from source: Xcode 15.4 or newer.
 
 ## Install
@@ -72,7 +73,8 @@ macOS may warn that the app is from an unidentified developer. Right-click the a
 3. Confirm the App Group `group.com.yjay18.widtget` is available to both targets.
 4. Run the `widtget app` target once so macOS registers the embedded widget.
 5. Connect GitHub in the host app (see below).
-6. Add **Gitlines** from the macOS widget gallery. Edit a widget to pick Daily, Weekly or Monthly.
+6. Open `WidtgetPreviews.swift` to inspect all widget families and states in the canvas.
+7. Add **Gitlines** from the macOS widget gallery. Edit a widget to pick Daily, Weekly or Monthly.
 
 The product name is Gitlines. The `widtget` project, scheme, target, bundle and App Group identifiers are compatibility names and are not going to be renamed.
 
@@ -80,12 +82,11 @@ Releases are published at [yjay18/Gitlines/releases](https://github.com/yjay18/G
 
 ## Connect GitHub
 
-1. In the host app, choose **Create a fine-grained token**. Pick your account as the resource owner, select the repositories to include, and keep the prefilled **Contents: read-only** permission.
-2. Paste the token into the host app and choose **Connect GitHub**.
-3. To include an organization's repositories, enter its GitHub name under **Add organization**. The generated link preselects that organization and the minimum read-only permission. Generate the token, paste it back and choose **Add organization**.
-4. If the organization requires approval, an organization owner must approve the token first. A pending token cannot expose private repositories.
+1. In **Connections**, select **Sign in with GitHub**.
+2. Copy the short verification code into GitHub's device page and approve access.
+3. Use the advanced fine-grained-token controls only when you need separate organization access. Keep **Contents: read-only** and choose only the repositories to include.
 
-GitHub limits each fine-grained token to one resource owner, so every organization needs its own token. Gitlines checks that the organization is visible to the token and that all connected tokens authenticate the same GitHub user. Tokens are stored only in Keychain.
+Gitlines stores GitHub credentials only in the app-scoped macOS Keychain. The GitHub App requests read-only Contents and Metadata access; manual fine-grained tokens remain available as a fallback. Each organization token must authenticate the same GitHub user and may require approval from an organization owner.
 
 ### How refresh works
 
@@ -116,6 +117,27 @@ Signed build with your Xcode team, widget registration and host-app launch:
 ```
 
 Build artifacts live under `.build/DerivedData` and are not committed. XcodeBuildMCP settings are in `.xcodebuildmcp/config.yaml`. Agent guidance is in `AGENTS.md`.
+
+## GitHub sign-in
+
+In **Connections**, choose the repositories Gitlines may read on GitHub, then select
+**Sign in with GitHub**. Copy the short verification code into GitHub's device page
+and approve sign-in. No personal access token needs to be created or pasted.
+The GitHub App requests read-only Contents and Metadata access. Existing manual
+connections remain available under the advanced controls.
+
+The current development registration, **Gitlines Desktop**, is limited to the
+`yjay18` account. Other accounts and organizations require a separately approved
+registration visibility change before distribution. Setup and validation details
+are in [docs/GITHUB-SIGN-IN.md](docs/GITHUB-SIGN-IN.md).
+
+## Data boundary
+
+`GitHubActivityService` reads repository activity; `GitHubSignInService` handles GitHub device authorization and token renewal. The host app keeps access and refresh tokens in the app-scoped macOS data-protection Keychain, turns API responses into display-ready daily, weekly, and monthly snapshots, and writes those snapshots atomically to the shared App Group container. `ActivityDataSource` in `widtget/Provider/ActivityProvider.swift` only reads that cache, so the widget extension never receives tokens or makes authenticated requests.
+
+The App Review build also includes clearly labelled sample data so the dashboard and widget presentation can be evaluated without granting access to a reviewer's GitHub account.
+
+Deterministic snapshots remain limited to Xcode previews and the disconnected sample state. Tapping a connected widget opens the authenticated user's GitHub profile. Gitlines does not claim to be an official GitHub product.
 
 ## Repository layout
 

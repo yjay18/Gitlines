@@ -486,7 +486,7 @@ private struct WidgetBlockView: View {
     }
 
     private var repositoriesBlock: some View {
-        VStack(alignment: .leading, spacing: family == .extraLarge ? 9 : 6) {
+        VStack(alignment: .leading, spacing: repositoryRowSpacing) {
             blockLabel("REPOSITORIES / \(entry.snapshot.repositories.count)")
 
             if entry.snapshot.repositories.isEmpty {
@@ -496,12 +496,11 @@ private struct WidgetBlockView: View {
             } else {
                 ForEach(entry.snapshot.visibleRepositories(limit: repositoryLimit)) { repository in
                     repositoryRow(repository)
-                        .frame(maxHeight: isExpandedFamily ? .infinity : nil, alignment: .top)
                 }
 
                 let hiddenCount = entry.snapshot.hiddenRepositoryCount(limit: repositoryLimit)
                 if hiddenCount > 0 {
-                    Text("+\(hiddenCount) MORE REPOSITORIES")
+                    Text("+\(hiddenCount) MORE \(hiddenCount == 1 ? "REPOSITORY" : "REPOSITORIES")")
                         .font(.system(size: 6.5, weight: .black, design: .monospaced))
                         .foregroundStyle(foreground.opacity(0.62))
                 }
@@ -615,7 +614,7 @@ private struct WidgetBlockView: View {
 
     @ViewBuilder
     private func repositoryRow(_ repository: RepositoryActivity) -> some View {
-        if isExpandedFamily {
+        if isExpandedFamily && !usesDenseRepositoryRows {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(repository.name)
@@ -639,24 +638,17 @@ private struct WidgetBlockView: View {
                 .font(.system(size: 5.6, weight: .black, design: .monospaced))
                 .foregroundStyle(foreground.opacity(0.58))
 
-                GeometryReader { proxy in
-                    let total = CGFloat(max(repository.totalChanged, 1))
-                    HStack(spacing: 0) {
-                        foreground
-                            .opacity(0.76)
-                            .frame(width: proxy.size.width * CGFloat(repository.additions) / total)
-                        palette.deletion
-                            .opacity(0.84)
-                    }
-                    .background(foreground.opacity(0.14))
-                }
-                .frame(height: 4)
+                repositoryMagnitudeBar(repository, height: 4)
             }
         } else {
             VStack(spacing: 4) {
                 HStack(spacing: 5) {
                     Text(repository.name)
-                        .font(.system(size: 8, weight: .black, design: .rounded))
+                        .font(.system(
+                            size: family == .extraLarge ? 9.5 : 8,
+                            weight: .black,
+                            design: .rounded
+                        ))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .truncationMode(.tail)
@@ -666,11 +658,36 @@ private struct WidgetBlockView: View {
                         .foregroundStyle(palette.deletion)
                 }
                 .font(.system(size: 7, weight: .black, design: .monospaced))
-                Rectangle()
-                    .fill(foreground.opacity(0.7))
-                    .frame(height: preferences.visualTheme == .blockwork ? 2 : 1)
+                repositoryMagnitudeBar(
+                    repository,
+                    height: family == .extraLarge ? 3 : (preferences.visualTheme == .blockwork ? 2 : 1)
+                )
             }
         }
+    }
+
+    private func repositoryMagnitudeBar(
+        _ repository: RepositoryActivity,
+        height: CGFloat
+    ) -> some View {
+        GeometryReader { proxy in
+            let total = CGFloat(max(repository.totalChanged, 1))
+            let magnitudeWidth = proxy.size.width
+                * CGFloat(repository.totalChanged)
+                / maximumRepositoryChange
+
+            HStack(spacing: 0) {
+                foreground
+                    .opacity(0.76)
+                    .frame(width: magnitudeWidth * CGFloat(repository.additions) / total)
+                palette.deletion
+                    .opacity(0.84)
+                    .frame(width: magnitudeWidth * CGFloat(repository.deletions) / total)
+                Spacer(minLength: 0)
+            }
+            .background(foreground.opacity(0.14))
+        }
+        .frame(height: height)
     }
 
     private func expandedActivityChartHeight(availableHeight: CGFloat) -> CGFloat {
@@ -746,8 +763,21 @@ private struct WidgetBlockView: View {
         }
     }
 
+    private var usesDenseRepositoryRows: Bool {
+        family == .extraLarge
+            && entry.snapshot.visibleRepositories(limit: repositoryLimit).count > 6
+    }
+
+    private var repositoryRowSpacing: CGFloat {
+        usesDenseRepositoryRows ? 5 : (family == .extraLarge ? 9 : 6)
+    }
+
     private var activeIntervals: Int {
         entry.snapshot.activity.filter { $0.totalChanged > 0 }.count
+    }
+
+    private var maximumRepositoryChange: CGFloat {
+        CGFloat(max(entry.snapshot.repositories.map(\.totalChanged).max() ?? 0, 1))
     }
 
     private var isExpandedFamily: Bool {
@@ -897,687 +927,5 @@ private struct ComposedWidgetPalette {
         case .ink: ink
         case .paper: paper
         }
-    }
-}
-
-private struct SmallWidgetView: View {
-    let entry: ActivityEntry
-    let preferences: WidgetViewPreferences
-
-    var body: some View {
-        VStack(spacing: 0) {
-            PeriodHeader(entry: entry, compact: true)
-
-            if let primaryMetricPane {
-                smallMetricTile(primaryMetricPane)
-            } else {
-                VStack(alignment: .leading, spacing: 5) {
-                    BlockworkSectionLabel("WEEKLY OUTPUT")
-                    Text("\(entry.snapshot.commits)")
-                        .font(.system(size: 32, weight: .black, design: .rounded))
-                    Text("COMMITS")
-                        .font(.system(size: 7, weight: .black, design: .monospaced))
-                    Spacer(minLength: 0)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(WidtgetPalette.lime)
-            }
-
-            if preferences.showActivity {
-                ActivityStrip(cells: entry.snapshot.activity, height: 10)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(WidtgetPalette.sky)
-            }
-
-            SecondaryMetrics(snapshot: entry.snapshot, compact: true)
-        }
-    }
-
-    @ViewBuilder
-    private func smallMetricTile(_ pane: WidgetPane) -> some View {
-        let secondary = secondaryMetricPane.map(metricSummary) ?? "\(entry.snapshot.commits) COMMITS"
-
-        if pane == .deletions {
-            BlockworkMetricTile(
-                value: entry.snapshot.deletions,
-                label: "LINES REMOVED",
-                footer: secondary,
-                sign: "−",
-                fill: WidtgetPalette.ink,
-                foreground: WidtgetPalette.paper,
-                valueColor: WidtgetPalette.orange,
-                fontSize: 32,
-                loading: entry.snapshot.state == .loading
-            )
-        } else {
-            BlockworkMetricTile(
-                value: entry.snapshot.additions,
-                label: "LINES MADE",
-                footer: secondary,
-                sign: "+",
-                fill: WidtgetPalette.orange,
-                foreground: WidtgetPalette.ink,
-                valueColor: WidtgetPalette.ink,
-                fontSize: 34,
-                loading: entry.snapshot.state == .loading
-            )
-        }
-    }
-
-    private var primaryMetricPane: WidgetPane? {
-        preferences.visiblePaneOrder.first { $0 == .additions || $0 == .deletions }
-    }
-
-    private var secondaryMetricPane: WidgetPane? {
-        preferences.visiblePaneOrder.first {
-            ($0 == .additions || $0 == .deletions) && $0 != primaryMetricPane
-        }
-    }
-
-    private func metricSummary(_ pane: WidgetPane) -> String {
-        switch pane {
-        case .additions:
-            "\(ActivityNumberFormat.compact(entry.snapshot.additions, sign: "+")) MADE"
-        case .deletions:
-            "\(ActivityNumberFormat.compact(entry.snapshot.deletions, sign: "−")) REMOVED"
-        default:
-            "\(entry.snapshot.commits) COMMITS"
-        }
-    }
-}
-
-private struct MediumWidgetView: View {
-    let entry: ActivityEntry
-    let preferences: WidgetViewPreferences
-
-    var body: some View {
-        VStack(spacing: 0) {
-            PeriodHeader(entry: entry)
-
-            GeometryReader { proxy in
-                let metricArea = hasDetails
-                    ? proxy.size.width * (orderedMetricPanes.count > 1 ? 0.64 : 0.43)
-                    : proxy.size.width
-                let metricWidth = orderedMetricPanes.isEmpty
-                    ? 0
-                    : metricArea / CGFloat(orderedMetricPanes.count)
-                let detailsWidth = hasDetails ? max(0, proxy.size.width - metricArea) : 0
-
-                HStack(spacing: 0) {
-                    ForEach(Array(orderedMetricPanes.enumerated()), id: \.element) { index, pane in
-                        mediumMetricPane(pane)
-                            .frame(width: metricWidth)
-                            .overlay(alignment: .leading) {
-                                if index > 0 {
-                                    BlockworkDivider()
-                                }
-                            }
-                    }
-
-                    if hasDetails {
-                        mediumDetails
-                            .frame(width: detailsWidth)
-                            .overlay(alignment: .leading) {
-                                if !orderedMetricPanes.isEmpty {
-                                    BlockworkDivider()
-                                }
-                            }
-                    }
-                }
-                .frame(width: proxy.size.width, height: proxy.size.height)
-            }
-        }
-    }
-
-    private var mediumDetails: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            BlockworkSectionLabel("MODULES / \(orderedDetailPanes.count)")
-
-            ForEach(orderedDetailPanes) { pane in
-                switch pane {
-                case .activity:
-                    ActivityStrip(cells: entry.snapshot.activity, height: 26)
-                case .repositories:
-                    RepositoryList(
-                        snapshot: entry.snapshot,
-                        limit: preferences.repositoryDetail.mediumLimit,
-                        compact: true
-                    )
-                default:
-                    EmptyView()
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if preferences.showUpdateTime {
-                UpdateStatus(snapshot: entry.snapshot)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(WidtgetPalette.sky)
-        .clipped()
-    }
-
-    @ViewBuilder
-    private func mediumMetricPane(_ pane: WidgetPane) -> some View {
-        if pane == .deletions {
-            BlockworkMetricTile(
-                value: entry.snapshot.deletions,
-                label: "REMOVED",
-                footer: "NET \(netChange)",
-                sign: "−",
-                fill: WidtgetPalette.ink,
-                foreground: WidtgetPalette.paper,
-                valueColor: WidtgetPalette.orange,
-                fontSize: 28,
-                loading: entry.snapshot.state == .loading
-            )
-        } else {
-            BlockworkMetricTile(
-                value: entry.snapshot.additions,
-                label: "LINES MADE",
-                footer: "\(entry.snapshot.commits) COMMITS",
-                sign: "+",
-                fill: WidtgetPalette.orange,
-                foreground: WidtgetPalette.ink,
-                valueColor: WidtgetPalette.ink,
-                fontSize: 34,
-                loading: entry.snapshot.state == .loading
-            )
-        }
-    }
-
-    private var orderedMetricPanes: [WidgetPane] {
-        preferences.visiblePaneOrder.filter { $0 == .additions || $0 == .deletions }
-    }
-
-    private var orderedDetailPanes: [WidgetPane] {
-        preferences.visiblePaneOrder.filter {
-            ($0 == .activity && preferences.showActivity)
-                || ($0 == .repositories && preferences.showRepositories)
-        }
-    }
-
-    private var hasDetails: Bool {
-        !orderedDetailPanes.isEmpty || preferences.showUpdateTime
-    }
-
-    private var netChange: String {
-        ActivityNumberFormat.compact(
-            entry.snapshot.additions - entry.snapshot.deletions,
-            sign: entry.snapshot.additions >= entry.snapshot.deletions ? "+" : "−"
-        )
-    }
-}
-
-private struct LargeWidgetView: View {
-    let entry: ActivityEntry
-    let preferences: WidgetViewPreferences
-
-    var body: some View {
-        VStack(spacing: 0) {
-            PeriodHeader(entry: entry)
-
-            if !orderedMetricPanes.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(Array(orderedMetricPanes.enumerated()), id: \.element) { index, pane in
-                        largeMetricPane(pane)
-                            .frame(
-                                maxWidth: pane == .deletions && orderedMetricPanes.count > 1
-                                    ? 150
-                                    : .infinity
-                            )
-                            .overlay(alignment: .leading) {
-                                if index > 0 {
-                                    BlockworkDivider()
-                                }
-                            }
-                    }
-                }
-                .frame(height: 86)
-            }
-
-            SecondaryMetrics(snapshot: entry.snapshot)
-                .overlay(alignment: .top) { BlockworkDivider(horizontal: true) }
-                .overlay(alignment: .bottom) { BlockworkDivider(horizontal: true) }
-
-            if !orderedDetailPanes.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(Array(orderedDetailPanes.enumerated()), id: \.element) { index, pane in
-                        largeDetailPane(pane)
-                            .overlay(alignment: .leading) {
-                                if index > 0 {
-                                    BlockworkDivider()
-                                }
-                            }
-                    }
-                }
-                .frame(maxHeight: .infinity)
-            } else {
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func largeMetricPane(_ pane: WidgetPane) -> some View {
-        if pane == .deletions {
-            BlockworkMetricTile(
-                value: entry.snapshot.deletions,
-                label: "REMOVED",
-                footer: "CLEAN CUTS",
-                sign: "−",
-                fill: WidtgetPalette.ink,
-                foreground: WidtgetPalette.paper,
-                valueColor: WidtgetPalette.orange,
-                fontSize: 35,
-                loading: entry.snapshot.state == .loading
-            )
-        } else {
-            BlockworkMetricTile(
-                value: entry.snapshot.additions,
-                label: "LINES MADE",
-                footer: "\(entry.snapshot.commits) COMMITS",
-                sign: "+",
-                fill: WidtgetPalette.orange,
-                foreground: WidtgetPalette.ink,
-                valueColor: WidtgetPalette.ink,
-                fontSize: 43,
-                loading: entry.snapshot.state == .loading
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func largeDetailPane(_ pane: WidgetPane) -> some View {
-        switch pane {
-        case .activity:
-            largeActivityPanel
-        case .repositories:
-            largeRepositoryPanel
-        default:
-            EmptyView()
-        }
-    }
-
-    private var largeActivityPanel: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            BlockworkSectionLabel("ACTIVITY")
-
-            if preferences.showActivity {
-                ActivityStrip(cells: entry.snapshot.activity, height: 42)
-                ActivityGrid(
-                    cells: entry.snapshot.activity,
-                    labels: compactActivityLabels,
-                    labelFontSize: 6.5
-                )
-
-                Rectangle()
-                    .fill(WidtgetPalette.ink)
-                    .frame(height: 2)
-
-                ActivityInsights(
-                    snapshot: entry.snapshot,
-                    labels: expandedActivityLabels,
-                    compact: true
-                )
-            }
-
-            Spacer(minLength: 0)
-
-            if preferences.showUpdateTime {
-                UpdateStatus(snapshot: entry.snapshot)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(WidtgetPalette.sky)
-        .clipped()
-    }
-
-    private var largeRepositoryPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            BlockworkSectionLabel("REPOSITORIES / \(entry.snapshot.repositories.count)")
-            RepositoryList(
-                snapshot: entry.snapshot,
-                limit: preferences.repositoryDetail.largeLimit
-            )
-        }
-        .padding(11)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(WidtgetPalette.paper)
-        .clipped()
-    }
-
-    private var compactActivityLabels: [String] {
-        activityLabels(style: .compact)
-    }
-
-    private var expandedActivityLabels: [String] {
-        activityLabels(style: .expanded)
-    }
-
-    private var orderedMetricPanes: [WidgetPane] {
-        preferences.visiblePaneOrder.filter { $0 == .additions || $0 == .deletions }
-    }
-
-    private var orderedDetailPanes: [WidgetPane] {
-        preferences.paneOrder.filter {
-            ($0 == .activity && (preferences.showActivity || preferences.showUpdateTime))
-                || ($0 == .repositories && preferences.showRepositories)
-        }
-    }
-
-    private func activityLabels(style: ActivityIntervalLabelStyle) -> [String] {
-        ActivityIntervalLabels.labels(
-            period: entry.period,
-            windowMode: preferences.periodWindowMode,
-            referenceDate: entry.snapshot.updatedAt,
-            cellCount: entry.snapshot.activity.count,
-            style: style
-        )
-    }
-}
-
-private struct ExtraLargeWidgetView: View {
-    let entry: ActivityEntry
-    let preferences: WidgetViewPreferences
-
-    var body: some View {
-        VStack(spacing: 0) {
-            PeriodHeader(entry: entry)
-
-            HStack(spacing: 0) {
-                extraLargeMetrics
-
-                ForEach(Array(orderedDetailGroups.enumerated()), id: \.element) { _, group in
-                    extraLargeDetailGroup(group)
-                        .overlay(alignment: .leading) { BlockworkDivider() }
-                }
-            }
-            .frame(maxHeight: .infinity)
-        }
-    }
-
-    private var extraLargeMetrics: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(orderedMetricPanes.enumerated()), id: \.element) { index, pane in
-                extraLargeMetricPane(pane)
-                    .overlay(alignment: .top) {
-                        if index > 0 {
-                            BlockworkDivider(horizontal: true)
-                        }
-                    }
-            }
-
-            SecondaryMetrics(snapshot: entry.snapshot)
-                .overlay(alignment: .top) {
-                    if !orderedMetricPanes.isEmpty {
-                        BlockworkDivider(horizontal: true)
-                    }
-                }
-
-            ActivityInsights(snapshot: entry.snapshot, labels: activityLabels)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 9)
-                .background(WidtgetPalette.lime)
-                .overlay(alignment: .top) { BlockworkDivider(horizontal: true) }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private func extraLargeMetricPane(_ pane: WidgetPane) -> some View {
-        if pane == .deletions {
-            BlockworkMetricTile(
-                value: entry.snapshot.deletions,
-                label: "LINES REMOVED",
-                footer: "NET \(netChange)",
-                sign: "−",
-                fill: WidtgetPalette.ink,
-                foreground: WidtgetPalette.paper,
-                valueColor: WidtgetPalette.orange,
-                fontSize: 46,
-                loading: entry.snapshot.state == .loading
-            )
-        } else {
-            BlockworkMetricTile(
-                value: entry.snapshot.additions,
-                label: "LINES MADE",
-                footer: "\(entry.snapshot.commits) COMMITS",
-                sign: "+",
-                fill: WidtgetPalette.orange,
-                foreground: WidtgetPalette.ink,
-                valueColor: WidtgetPalette.ink,
-                fontSize: 50,
-                loading: entry.snapshot.state == .loading
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func extraLargeDetailGroup(_ group: ExtraLargeDetailGroup) -> some View {
-        switch group {
-        case .activityAndSnake:
-            extraLargeActivityColumn
-        case .repositories:
-            extraLargeRepositoryPanel
-        }
-    }
-
-    private var extraLargeActivityColumn: some View {
-        Group {
-            if preferences.showActivity && preferences.shows(.snake) {
-                GeometryReader { proxy in
-                    let spacing: CGFloat = 10
-                    let minimumPetHeight: CGFloat = 76
-                    let desiredActivityHeight = proxy.size.height * 0.62
-                    let maximumActivityHeight = max(0, proxy.size.height - spacing - minimumPetHeight)
-                    let activityHeight = min(desiredActivityHeight, maximumActivityHeight)
-
-                    VStack(spacing: spacing) {
-                        activityPanel
-                            .frame(height: activityHeight, alignment: .topLeading)
-
-                        CommitSnakeView(
-                            snapshot: entry.snapshot,
-                            commitsPerBlock: preferences.snakeCommitsPerBlock,
-                        basis: preferences.snakeBlockBasis
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(WidtgetPalette.ink)
-                    }
-                    .padding(.leading, 3)
-                    .background(WidtgetPalette.ink)
-                    .frame(
-                        width: proxy.size.width,
-                        height: proxy.size.height,
-                        alignment: .top
-                    )
-                }
-            } else if preferences.showActivity {
-                activityPanel
-            } else if preferences.shows(.snake) {
-                CommitSnakeView(
-                    snapshot: entry.snapshot,
-                    commitsPerBlock: preferences.snakeCommitsPerBlock,
-                basis: preferences.snakeBlockBasis
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(WidtgetPalette.ink)
-            } else {
-                activityPanel
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    private var activityPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            BlockworkSectionLabel("ACTIVITY / \(entry.snapshot.activity.count) INTERVALS")
-
-            if preferences.showActivity {
-                VStack(spacing: 5) {
-                    ActivityStrip(
-                        cells: entry.snapshot.activity,
-                        height: extraLargeActivityStripHeight
-                    )
-                    ActivityAxisLabels(
-                        labels: activityLabels,
-                        fontSize: 7
-                    )
-                }
-                ActivityGrid(cells: entry.snapshot.activity)
-            }
-
-            if preferences.showUpdateTime {
-                UpdateStatus(snapshot: entry.snapshot)
-            }
-        }
-        .padding(13)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(WidtgetPalette.sky)
-        .clipped()
-    }
-
-    private var extraLargeRepositoryPanel: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            BlockworkSectionLabel("REPOSITORIES / \(entry.snapshot.repositories.count)")
-            RepositoryList(
-                snapshot: entry.snapshot,
-                limit: preferences.repositoryDetail.extraLargeLimit
-            )
-        }
-        .padding(13)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(WidtgetPalette.paper)
-        .clipped()
-    }
-
-    private var extraLargeActivityStripHeight: CGFloat {
-        let rowCount = Int(ceil(Double(entry.snapshot.activity.count) / 7.0))
-        return max(44, 82 - CGFloat(max(0, rowCount - 1)) * 24)
-    }
-
-    private var activityLabels: [String] {
-        ActivityIntervalLabels.labels(
-            period: entry.period,
-            windowMode: preferences.periodWindowMode,
-            referenceDate: entry.snapshot.updatedAt,
-            cellCount: entry.snapshot.activity.count,
-            style: .expanded
-        )
-    }
-
-    private var orderedMetricPanes: [WidgetPane] {
-        preferences.visiblePaneOrder.filter { $0 == .additions || $0 == .deletions }
-    }
-
-    private var orderedDetailGroups: [ExtraLargeDetailGroup] {
-        preferences.paneOrder.reduce(into: [ExtraLargeDetailGroup]()) { result, pane in
-            let group: ExtraLargeDetailGroup?
-            switch pane {
-            case .activity where preferences.showActivity || preferences.showUpdateTime:
-                group = .activityAndSnake
-            case .snake where preferences.shows(.snake):
-                group = .activityAndSnake
-            case .repositories where preferences.showRepositories:
-                group = .repositories
-            default:
-                group = nil
-            }
-
-            if let group, !result.contains(group) {
-                result.append(group)
-            }
-        }
-    }
-
-    private var netChange: String {
-        ActivityNumberFormat.compact(
-            entry.snapshot.additions - entry.snapshot.deletions,
-            sign: entry.snapshot.additions >= entry.snapshot.deletions ? "+" : "−"
-        )
-    }
-}
-
-private enum ExtraLargeDetailGroup: Hashable {
-    case activityAndSnake
-    case repositories
-}
-
-private struct BlockworkMetricTile: View {
-    let value: Int
-    let label: String
-    let footer: String
-    let sign: Character
-    let fill: Color
-    let foreground: Color
-    let valueColor: Color
-    let fontSize: CGFloat
-    let loading: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            BlockworkSectionLabel(label, color: foreground.opacity(0.76))
-
-            Spacer(minLength: 1)
-
-            PrimaryMetric(
-                value: value,
-                label: label,
-                sign: sign,
-                color: valueColor,
-                fontSize: fontSize,
-                loading: loading
-            )
-
-            Text(footer)
-                .font(.system(size: 7, weight: .black, design: .monospaced))
-                .tracking(0.35)
-                .foregroundStyle(foreground.opacity(0.72))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .padding(11)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(fill)
-        .clipped()
-    }
-}
-
-private struct BlockworkSectionLabel: View {
-    let text: String
-    let color: Color
-
-    init(_ text: String, color: Color = WidtgetPalette.ink.opacity(0.72)) {
-        self.text = text
-        self.color = color
-    }
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 7.5, weight: .black, design: .monospaced))
-            .tracking(0.8)
-            .foregroundStyle(color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-    }
-}
-
-private struct BlockworkDivider: View {
-    var horizontal = false
-
-    var body: some View {
-        Rectangle()
-            .fill(WidtgetPalette.ink)
-            .frame(
-                width: horizontal ? nil : 3,
-                height: horizontal ? 3 : nil
-            )
     }
 }

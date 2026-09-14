@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import WidgetKit
@@ -33,9 +34,16 @@ struct WidgetSettingsView: View {
     @State private var showingRemoveOrganizationConfirmation = false
     @State private var organizationPendingRemoval: GitHubConnectionSummary?
     @State private var isReplacingAccountToken = false
+    @State private var isUsingManualToken = false
     @State private var isAddingOrganization = false
     @State private var selectedSection: HostSection = .dashboard
     @State private var dashboardWindowMode = SharedPreferences.windowMode
+    @State private var dashboardPeriod = SharedPreferences.defaults
+        .string(forKey: SharedPreferences.Key.dashboardPeriod)
+        .flatMap(ActivityPeriod.init(rawValue:)) ?? .weekly
+    @State private var dashboardTheme = SharedPreferences.defaults
+        .string(forKey: SharedPreferences.Key.dashboardTheme)
+        .flatMap(WidgetVisualTheme.init(rawValue:)) ?? SharedPreferences.modularPreferences.visualTheme
     @State private var paneOrder = SharedPreferences.modularPreferences.paneOrder
     @State private var enabledPanes = SharedPreferences.modularPreferences.enabledPanes
     @State private var blockworkColorway = SharedPreferences.modularPreferences.colorway
@@ -77,26 +85,38 @@ struct WidgetSettingsView: View {
     @State private var draggedOrigin: WidgetSlotOrigin?
 
     var body: some View {
+        hostContent
+        .confirmationDialog(
+            "Disconnect @\(github.username)?",
+            isPresented: $showingDisconnectConfirmation
+        ) {
+            Button("Disconnect GitHub", role: .destructive) {
+                github.disconnect()
+            }
+        } message: {
+            Text("The Keychain token and cached widget activity will be removed from this Mac.")
+        }
+        .confirmationDialog(
+            "Remove \(organizationPendingRemoval?.owner ?? "organization")?",
+            isPresented: $showingRemoveOrganizationConfirmation
+        ) {
+            Button("Remove organization", role: .destructive) {
+                guard let id = organizationPendingRemoval?.id else { return }
+                Task { await github.removeOrganization(id: id) }
+            }
+        } message: {
+            Text("Its token will be removed from Keychain and its repositories will stop contributing to the widget.")
+        }
+    }
+
+    private var hostContent: some View {
         HStack(spacing: 0) {
             sidebar
 
             Group {
                 switch selectedSection {
                 case .dashboard:
-                    if visualTheme == .blockwork {
-                        BlockworkAnalyticsDashboardView(
-                            github: github,
-                            windowMode: $dashboardWindowMode,
-                            openConnections: { selectedSection = .connections }
-                        )
-                    } else {
-                        AnalyticsDashboardView(
-                            github: github,
-                            windowMode: $dashboardWindowMode,
-                            openConnections: { selectedSection = .connections }
-                        )
-                        .environment(\.themePalette, visualTheme.dashboardPalette)
-                    }
+                    dashboardContent
                 case .widgets:
                     widgetStudioContent
                 case .connections:
@@ -132,6 +152,12 @@ struct WidgetSettingsView: View {
             SharedPreferences.windowMode = newValue
             reloadWidgets()
         }
+        .onChange(of: dashboardTheme) { _, newValue in
+            SharedPreferences.defaults.set(newValue.rawValue, forKey: SharedPreferences.Key.dashboardTheme)
+        }
+        .onChange(of: dashboardPeriod) { _, newValue in
+            SharedPreferences.defaults.set(newValue.rawValue, forKey: SharedPreferences.Key.dashboardPeriod)
+        }
         .onChange(of: familyLayouts) { _, _ in
             saveWidgetStudio()
         }
@@ -142,43 +168,29 @@ struct WidgetSettingsView: View {
             guard url.scheme == "widtget", url.host == "refresh" else { return }
             Task { await github.refresh(scope: .recentBranches) }
         }
-        .confirmationDialog(
-            "Disconnect @\(github.username)?",
-            isPresented: $showingDisconnectConfirmation
-        ) {
-            Button("Disconnect GitHub", role: .destructive) {
-                github.disconnect()
-            }
-        } message: {
-            Text("The Keychain token and cached widget activity will be removed from this Mac.")
-        }
-        .confirmationDialog(
-            "Remove \(organizationPendingRemoval?.owner ?? "organization")?",
-            isPresented: $showingRemoveOrganizationConfirmation
-        ) {
-            Button("Remove organization", role: .destructive) {
-                guard let id = organizationPendingRemoval?.id else { return }
-                Task { await github.removeOrganization(id: id) }
-            }
-        } message: {
-            Text("Its token will be removed from Keychain and its repositories will stop contributing to the widget.")
-        }
+    }
+
+    private var dashboardContent: some View {
+        RepositoryDashboardView(
+            github: github, period: $dashboardPeriod, windowMode: $dashboardWindowMode,
+            openConnections: { selectedSection = .connections }
+        )
+        .environment(\.themePalette, dashboardTheme.dashboardPalette)
+        .environment(\.colorScheme, dashboardTheme == .broadsheet || dashboardTheme == .blockwork ? .light : .dark)
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(DashboardPalette.green)
-                    Text("W")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundStyle(DashboardPalette.ink)
-                }
-                .frame(width: 34, height: 34)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .accessibilityHidden(true)
+                    .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("widtget")
+                    Text("Gitlines")
                         .font(.system(size: 15, weight: .heavy, design: .rounded))
                     Text("GITHUB SIGNAL")
                         .font(.system(size: 7, weight: .bold, design: .monospaced))
@@ -222,6 +234,25 @@ struct WidgetSettingsView: View {
                 }
             }
             .padding(.horizontal, 9)
+
+            if selectedSection == .dashboard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DASHBOARD THEME")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(DashboardPalette.muted)
+                    Picker("Dashboard theme", selection: $dashboardTheme) {
+                        ForEach(WidgetVisualTheme.allCases) { theme in
+                            Text(theme.displayName).tag(theme)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .help("Choose the dashboard appearance. Widget themes are set in Widget Studio.")
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+            }
 
             Spacer()
 
@@ -447,7 +478,7 @@ struct WidgetSettingsView: View {
             repositories: [
                 RepositoryActivity(name: "Studio-portal", commits: 12, additions: 19000, deletions: 2100),
                 RepositoryActivity(name: "linguistics", commits: 8, additions: 5000, deletions: 800),
-                RepositoryActivity(name: "widtget", commits: 6, additions: 6100, deletions: 757),
+                RepositoryActivity(name: "gitlines", commits: 6, additions: 6100, deletions: 757),
                 RepositoryActivity(name: "storymode", commits: 3, additions: 659, deletions: 40)
             ],
             activity: (0..<7).map { ActivityCell(id: $0, additions: adds[$0], deletions: dels[$0]) },
@@ -815,211 +846,6 @@ struct WidgetSettingsView: View {
         }
     }
 
-    private func paneLibraryRow(_ pane: WidgetPane) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 11, weight: .black))
-                .foregroundStyle(studioMuted)
-
-            Image(systemName: pane.studioSymbol)
-                .font(.system(size: 12, weight: .bold))
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(pane.displayName)
-                    .font(.system(size: 11, weight: .black, design: .rounded))
-                Text(pane.detail)
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(studioMuted)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Toggle("", isOn: paneEnabledBinding(pane))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-        }
-        .padding(.horizontal, 11)
-        .frame(height: 54)
-        .background(enabledPanes.contains(pane) ? studioLime.opacity(0.24) : Color.clear)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(studioInk.opacity(0.24)).frame(height: 1)
-        }
-        .contentShape(Rectangle())
-        .onDrag {
-            draggedPane = pane
-            return NSItemProvider(object: pane.rawValue as NSString)
-        }
-        .onDrop(
-            of: [UTType.text],
-            delegate: WidgetPaneDropDelegate(
-                destination: pane,
-                panes: $paneOrder,
-                draggedPane: $draggedPane
-            )
-        )
-    }
-
-    private var studioWidgetPreview: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(github.username.isEmpty ? "@yjay18" : "@\(github.username)")
-                    .font(.system(size: 10, weight: .black, design: .rounded))
-                Spacer()
-                Text("WEEKLY")
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                    .foregroundStyle(studioInk)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(studioLime)
-                Image(systemName: "arrow.clockwise")
-                    .foregroundStyle(studioLime)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .foregroundStyle(studioPaper)
-            .background(studioInk)
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 3),
-                    GridItem(.flexible(), spacing: 3)
-                ],
-                spacing: 3
-            ) {
-                ForEach(paneOrder.filter(enabledPanes.contains)) { pane in
-                    studioPanePreview(pane)
-                }
-            }
-            .padding(3)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(studioInk)
-        }
-        .frame(maxWidth: 590, minHeight: 360, maxHeight: 430)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(0.28), radius: 22, y: 14)
-        .hueRotation(studioHueRotation)
-        .saturation(blockworkColorway == .mono ? 0 : 1)
-        .animation(.snappy(duration: 0.28), value: paneOrder)
-        .animation(.snappy(duration: 0.28), value: enabledPanes)
-    }
-
-    @ViewBuilder
-    private func studioPanePreview(_ pane: WidgetPane) -> some View {
-        switch pane {
-        case .additions:
-            studioPreviewTile(title: "LINES MADE", value: "+25,036", color: studioOrange)
-        case .deletions:
-            studioPreviewTile(
-                title: "LINES REMOVED",
-                value: "−1,031",
-                color: studioInk,
-                foreground: studioPaper,
-                valueColor: studioOrange
-            )
-        case .summary:
-            studioPreviewTile(title: "SUMMARY", value: "29 / 3", color: studioLime)
-        case .activity:
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ACTIVITY")
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                HStack(alignment: .bottom, spacing: 5) {
-                    ForEach(Array([0.92, 0.72, 0.23, 0.05, 0.78, 0.69, 0.66].enumerated()), id: \.offset) { _, value in
-                        Rectangle()
-                            .fill(studioInk)
-                            .frame(height: 52 * value)
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .background(studioSky)
-        case .activityTable:
-            studioPreviewTile(title: "ACTIVITY TABLE", value: "▦ ▦ ▦", color: studioSky)
-        case .insights:
-            studioPreviewTile(title: "NET / PEAK / AVG", value: "+24k", color: studioLime)
-        case .repositories:
-            VStack(alignment: .leading, spacing: 8) {
-                Text("REPOSITORIES / 03")
-                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                ForEach(["linguist  +19k", "Studio  +5k", "storymode  +659"], id: \.self) { repository in
-                    Text(repository)
-                        .font(.system(size: 9, weight: .black, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 4)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(studioInk).frame(height: 1)
-                        }
-                }
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .background(studioPaper)
-        case .snake:
-            HStack(spacing: 12) {
-                Image(systemName: "circle.grid.3x3.fill")
-                    .font(.system(size: 31, weight: .black))
-                    .foregroundStyle(studioLime)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("snek happy")
-                        .font(.system(size: 16, weight: .black, design: .rounded))
-                    Text("29 COMMITS")
-                        .font(.system(size: 7, weight: .black, design: .monospaced))
-                        .foregroundStyle(studioLime)
-                }
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .foregroundStyle(studioPaper)
-            .background(studioInk)
-        }
-    }
-
-    private func studioPreviewTile(
-        title: String,
-        value: String,
-        color: Color,
-        foreground: Color? = nil,
-        valueColor: Color? = nil
-    ) -> some View {
-        let foreground = foreground ?? studioInk
-        return VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 8, weight: .black, design: .monospaced))
-            Text(value)
-                .font(.system(size: 27, weight: .black, design: .rounded))
-                .tracking(-1.4)
-                .foregroundStyle(valueColor ?? foreground)
-                .lineLimit(1)
-                .minimumScaleFactor(0.62)
-        }
-        .foregroundStyle(foreground)
-        .padding(11)
-        .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
-        .background(color)
-    }
-
-    private func paneEnabledBinding(_ pane: WidgetPane) -> Binding<Bool> {
-        Binding {
-            enabledPanes.contains(pane)
-        } set: { isEnabled in
-            withAnimation(.snappy(duration: 0.22)) {
-                if isEnabled {
-                    enabledPanes.insert(pane)
-                } else {
-                    enabledPanes.remove(pane)
-                }
-            }
-        }
-    }
-
     private var studioInk: Color {
         Color(red: 0.063, green: 0.067, blue: 0.059)
     }
@@ -1043,25 +869,17 @@ struct WidgetSettingsView: View {
     private var studioMuted: Color {
         Color(red: 0.46, green: 0.45, blue: 0.41)
     }
-
-    private var studioHueRotation: Angle {
-        blockworkColorway == .cobalt ? .degrees(198) : .zero
-    }
-
     private var connectionsContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                githubSignInSection
                 if !github.hasStoredToken {
-                    githubConnectionSection
+                    DisclosureGroup("Use a personal access token instead", isExpanded: $isUsingManualToken) {
+                        githubConnectionSection
+                    }
                 } else {
                     connectionManagementSection
-                    if let message = github.message {
-                        connectionError(message)
-                    }
-                    if let notice = github.notice {
-                        connectionNotice(notice)
-                    }
                 }
                 refreshIntervalSection
                 snekBlockSection
@@ -1084,7 +902,7 @@ struct WidgetSettingsView: View {
                 }
                 .pickerStyle(.menu)
 
-                Text("Applies to every widtget widget. Automatic uses a system-tuned default; macOS still meters refreshes against the daily budget, so very short intervals are not guaranteed.")
+                Text("Applies to every Gitlines widget. Automatic uses a system-tuned default; macOS still meters refreshes against the daily budget, so very short intervals are not guaranteed.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1186,6 +1004,79 @@ struct WidgetSettingsView: View {
         }
     }
 
+    private var githubSignInSection: some View {
+        GroupBox("GitHub sign-in") {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(github.usesGitHubSignIn
+                     ? "Connected with GitHub as @\(github.username)"
+                     : (github.hasStoredToken ? "Connected with a personal access token" : "GitHub is not connected"),
+                      systemImage: github.usesGitHubSignIn ? "checkmark.circle.fill" : "person.crop.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Choose the repositories Gitlines may read on GitHub, then sign in. Contents and metadata access is read-only.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    if let url = GitHubSignInConfiguration.installationURL {
+                        Link("Choose repositories on GitHub", destination: url)
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    Spacer()
+                    if !github.isSigningIn {
+                        Button(github.usesGitHubSignIn ? "Sign in again" : "Sign in with GitHub") {
+                            github.beginSignIn()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(github.isBusy)
+                    }
+                }
+
+                if let device = github.deviceAuthorization {
+                    Divider()
+                    Text("Enter this code on github.com/login/device")
+                        .font(.system(size: 11, weight: .medium))
+                    Text(device.userCode)
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
+                        .textSelection(.enabled)
+                        .accessibilityLabel("GitHub verification code: \(device.userCode)")
+                    HStack {
+                        Button("Copy code and open GitHub") { github.openGitHubSignIn() }
+                            .buttonStyle(.borderedProminent)
+                        Spacer()
+                        Text("Expires \(device.expiresAt, style: .relative)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if github.isSigningIn {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(github.signInStatus ?? "Connecting to GitHub…")
+                            .font(.system(size: 11))
+                        Spacer()
+                        Button("Cancel sign-in") { github.cancelSignIn() }
+                    }
+                }
+                Text("Credentials stay in this Mac’s Keychain. Widgets receive activity snapshots only.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                if !github.isSigningIn, let status = github.signInStatus {
+                    Text(status)
+                        .font(.system(size: 11, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let message = github.message {
+                    connectionError(message)
+                }
+                if let notice = github.notice {
+                    connectionNotice(notice)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
     private var githubConnectionSection: some View {
         GroupBox("GitHub activity") {
             VStack(alignment: .leading, spacing: 12) {
@@ -1240,7 +1131,7 @@ struct WidgetSettingsView: View {
 
                 Divider()
 
-                tokenDisclosure(title: "Replace account token", isExpanded: $isReplacingAccountToken) {
+                tokenDisclosure(title: "Advanced: replace with a personal access token", isExpanded: $isReplacingAccountToken) {
                     VStack(alignment: .leading, spacing: 8) {
 
                     HStack {
@@ -1268,7 +1159,7 @@ struct WidgetSettingsView: View {
                     }
 
                     HStack(alignment: .top) {
-                        Text("widtget checks the token belongs to @\(github.username), refreshes every branch, then replaces the saved Keychain token. Your current token stays active if validation fails.")
+                        Text("Gitlines checks the token belongs to @\(github.username), refreshes every branch, then replaces the saved Keychain token. Your current token stays active if validation fails.")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1285,7 +1176,7 @@ struct WidgetSettingsView: View {
 
                 Divider()
 
-                tokenDisclosure(title: "Add organization", isExpanded: $isAddingOrganization) {
+                tokenDisclosure(title: "Advanced: add an organization token", isExpanded: $isAddingOrganization) {
                     VStack(alignment: .leading, spacing: 8) {
 
                     TextField("GitHub organization name", text: $github.organizationInput)
@@ -1317,7 +1208,7 @@ struct WidgetSettingsView: View {
                     }
 
                     HStack(alignment: .top) {
-                        Text("widtget verifies the organization and repository access before saving. If approval is required, ask an organization owner to approve the token first.")
+                        Text("Gitlines verifies the organization and repository access before saving. If approval is required, ask an organization owner to approve the token first.")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1347,6 +1238,9 @@ struct WidgetSettingsView: View {
                 Text(connection.kind == .account ? "@\(connection.owner)" : connection.owner)
                     .font(.system(size: 12, weight: .semibold))
 
+                Text(connection.usesGitHubSignIn ? "GitHub sign-in" : "Personal access token")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
                 if let repositoryCount = connection.repositoryCount,
                    let privateRepositoryCount = connection.privateRepositoryCount {
                     Text("\(repositoryCount) \(repositoryCount == 1 ? "repository" : "repositories") · \(privateRepositoryCount) private")
@@ -1402,7 +1296,7 @@ struct WidgetSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Per-widget controls stay with the widget")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
-                    Text("Right-click a widtget on the desktop and choose Edit Widget.")
+                    Text("Right-click a Gitlines widget on the desktop and choose Edit Widget.")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
@@ -1444,11 +1338,6 @@ struct WidgetSettingsView: View {
             }
         }
     }
-
-    private var isAnyBlockwork: Bool {
-        visualTheme == .blockwork || themeOverrides.values.contains(.blockwork)
-    }
-
     private func themeOverrideBinding(_ family: WidgetLayoutFamily) -> Binding<WidgetVisualTheme?> {
         Binding(
             get: { themeOverrides[family] },

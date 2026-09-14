@@ -1,0 +1,26 @@
+=== PRIMARY (X / Twitter) ===
+Six themes. Four widget sizes. One commit snapshot that never changes when the look does.
+
+Gitlines puts your real GitHub activity on your Mac desktop — exact additions, deletions, net lines, peak hours, repo rankings.
+
+And yes, there is a snake.
+
+=== SHORT (one-liner) ===
+I built a macOS widget with six full themes for one number. There is also a snake.
+
+=== LINKEDIN ===
+Gitlines is a native macOS widget for GitHub activity — exact commits, additions, deletions, net change, peak intervals and repository rankings, pulled across every branch and deduplicated by SHA.
+
+It ships with six complete visual themes: a restrained dark default, a translucent Glasshouse, a terminal-green Phosphor, a newsprint Broadsheet, a four-colour Arcade, and a modular Blockwork studio you can rearrange per widget size. Every one of them renders the identical snapshot — changing the look never changes the numbers.
+
+Four purpose-built widget sizes. Fine-grained read-only tokens, stored in Keychain. macOS 14+.
+
+=== DISCORD / HN ===
+Gitlines — a macOS widget that shows your actual GitHub commit activity (additions, deletions, net, peak hours, per-repo breakdown) across every branch, deduplicated by SHA.
+
+The part I over-invested in: six complete themes, each with four hand-built widget layouts, all rendering the same snapshot. Phosphor is a real terminal. Broadsheet is real newsprint. Arcade is a four-colour handheld.
+
+There is also a commit snake whose internal states are named `smol snek`, `growing snek` and `snek happy`. That is not a joke I added for the video — it is in the source.
+
+=== ALT TEXT (for the video) ===
+A 21-second product film for Gitlines, a macOS GitHub-activity widget. A large mint "+1,247" and coral "−389" resolve into a desktop widget, which then re-skins through six themes — Default, Glasshouse, Phosphor, Broadsheet, Arcade, Blockwork — while the numbers stay identical. It closes on the commit snake growing to "snek happy" and the Gitlines logo.

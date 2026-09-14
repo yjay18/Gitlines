@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gitlines — your GitHub day, on your desktop</title>
+<meta name="description" content="Gitlines is a native macOS widget for your real GitHub commit activity. Additions, deletions, net lines, peak hours and repository rankings, on the desktop.">
+<meta property="og:title" content="Gitlines"><meta property="og:description" content="Your real GitHub commit activity, on the macOS desktop."><meta property="og:image" content="assets/brag-poster.jpg">
+<link rel="icon" href="assets/favicon.png">
+<link rel="stylesheet" href="assets/widget.css">
+<link rel="stylesheet" href="assets/sizes.css">
+<style>
+  :root { --ink:#090C10; --panel:#12161B; --lift:#171D23; --line:rgba(255,255,255,.09); --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --coral:#F26166;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Inter, Arial, sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin:0; background:var(--ink); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  a { color:inherit; }
+  #gl, #css { position:fixed; inset:0; z-index:0; } #css { pointer-events:none; }
+  .node { width:880px; }
+  .wrap { position:relative; z-index:1; }
+  .container { width:min(1180px, calc(100% - 48px)); margin:0 auto; }
+
+  nav { position:sticky; top:0; z-index:5; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); background:rgba(9,12,16,.55); border-bottom:1px solid var(--line); }
+  nav .container { display:flex; align-items:center; justify-content:space-between; height:60px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:-.01em; text-decoration:none; font-size:17px; }
+  .brand img { width:34px; height:34px; border-radius:8px; }
+  nav ul { display:flex; gap:26px; list-style:none; margin:0; padding:0; font-size:14px; color:var(--muted); }
+  nav a { text-decoration:none; } nav ul a:hover { color:var(--text); }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:12px 20px; border-radius:999px; font-weight:600; font-size:15px; text-decoration:none; border:1px solid var(--line); transition:transform .2s, background .2s; }
+  .btn:hover { transform:translateY(-1px); }
+  .btn.primary { background:var(--text); color:var(--ink); border-color:transparent; }
+  .btn.ghost:hover { background:rgba(255,255,255,.06); }
+
+  /* hero */
+  .fly { height:760vh; position:relative; } .fly .stick { position:sticky; top:0; height:100vh; }
+  .hero { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; transition:opacity .4s; pointer-events:none; }
+  .hero > * { max-width:min(560px, 52%); }
+  .hero .lede { max-width:min(460px, 46%); }
+  .hero { pointer-events:none; }
+  .fcap { position:absolute; left:0; bottom:9vh; max-width:560px; opacity:0; transform:translateY(12px); transition:opacity .35s, transform .4s; pointer-events:none; }
+  .fcap.on { opacity:1; transform:none; } .fcap .k { font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--green); margin-bottom:10px; }
+  .fcap h2 { margin:0 0 8px; } .fcap p { margin:0; color:var(--muted); font-size:17px; }
+  .dots { position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:14px; opacity:0; transition:opacity .3s; }
+  .dots.on { opacity:1; } .dots i { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.2); transition:background .2s, transform .2s; } .dots i.on { background:var(--green); transform:scale(1.5); }
+  .scrollhint { position:absolute; left:50%; bottom:28px; transform:translateX(-50%); font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); animation:bob 2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform:translate(-50%, 6px); } }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin-bottom:22px; }
+  h1 { font-size:clamp(44px, 6.4vw, 88px); line-height:.98; letter-spacing:-.035em; margin:0 0 24px; font-weight:700; }
+  h1 em { font-style:normal; color:var(--green); }
+  .lede { font-size:19px; line-height:1.5; color:var(--muted); max-width:52ch; margin:0 0 34px; }
+  .cta { display:flex; gap:12px; flex-wrap:wrap; }
+
+  section { padding:120px 0; }
+  .sec-head { max-width:720px; margin-bottom:48px; }
+  h2 { font-size:clamp(32px, 4vw, 54px); letter-spacing:-.03em; line-height:1.05; margin:0 0 16px; }
+  .sub { color:var(--muted); font-size:18px; line-height:1.5; margin:0; }
+
+  /* film */
+  .film { position:relative; border-radius:24px; overflow:hidden; border:1px solid var(--line); background:#000; box-shadow:0 60px 140px rgba(0,0,0,.6); }
+  .film video { display:block; width:100%; }
+  .film-cap { display:flex; justify-content:space-between; font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:14px; letter-spacing:.06em; }
+
+  /* themes */
+  .stage { position:relative; padding:56px; border-radius:28px; background:rgba(18,22,27,.9); border:1px solid var(--line); overflow:hidden; }
+  .stage .gl-widget { transition:opacity .25s; }
+  .stage .pin { position:absolute; top:18px; right:22px; font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .stage.t-bg-broadsheet { background:#E9E4D5; } .stage.t-bg-arcade { background:#0F380F; } .stage.t-bg-phosphor { background:#06090A; } .stage.t-bg-glasshouse { background:linear-gradient(135deg,#2a2f3a,#1C1D21 55%,#3a2f38); }
+  .stage.t-bg-broadsheet .pin { color:#6D6555; } .stage.t-bg-phosphor .pin, .stage.t-bg-arcade .pin { color:#2C8F58; }
+  /* the picker is the faces themselves — no names, no count */
+  .faces { display:grid; grid-template-columns:repeat(auto-fit, minmax(148px, 1fr)); gap:12px; margin-top:14px; }
+  .face { padding:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; cursor:pointer; background:#0c0f13; opacity:.5; transition:opacity .2s, transform .2s, border-color .2s; }
+  .face:hover { opacity:.85; transform:translateY(-2px); }
+  .face.on { opacity:1; border-color:rgba(255,255,255,.3); transform:translateY(-2px); }
+  .face .gl-widget { pointer-events:none; display:block; }
+  .face.f-broadsheet { background:#E9E4D5; } .face.f-arcade { background:#0F380F; } .face.f-phosphor { background:#06090A; } .face.f-glasshouse { background:#242830; }
+
+  /* features */
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; }
+  .card { background:rgba(18,22,27,.82); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:20px; padding:26px; }
+  .card h3 { margin:14px 0 8px; font-size:18px; letter-spacing:-.01em; }
+  .card p { margin:0; color:var(--muted); line-height:1.5; font-size:15px; }
+  .card .k { font-family:var(--mono); font-size:12px; letter-spacing:.14em; color:var(--green); text-transform:uppercase; }
+  .card.coral .k { color:var(--coral); }
+
+  /* snek */
+  .snek-wrap { display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:center; }
+  .snek-grid { display:grid; grid-template-columns:repeat(12, 1fr); gap:6px; }
+  .snek-grid i { aspect-ratio:1; border-radius:5px; background:rgba(255,255,255,.05); transition:background .25s, transform .25s; }
+  .snek-grid i.on { background:var(--green); transform:scale(.92); }
+  .snek-grid i.head { background:#7ff0a8; }
+  .snek-state { font-family:var(--mono); font-size:14px; color:var(--muted); margin-top:16px; display:flex; justify-content:space-between; }
+  .snek-state b { color:var(--green); font-weight:600; }
+
+  /* get */
+  .veil { position:relative; }
+  .veil::before { content:""; position:absolute; inset:-60px -40px; z-index:-1; pointer-events:none;
+    background:radial-gradient(ellipse 62% 62% at 50% 50%, rgba(9,12,16,.94) 0%, rgba(9,12,16,.8) 48%, rgba(9,12,16,0) 80%); }
+  .get { text-align:center; padding:140px 0 100px; }
+  .get img { width:112px; height:112px; border-radius:26px; box-shadow:0 30px 80px rgba(0,0,0,.6); margin-bottom:28px; }
+  footer { border-top:1px solid var(--line); padding:28px 0; color:var(--muted); font-size:13px; }
+  footer .container { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+
+  .reveal { opacity:0; transform:translateY(24px); transition:opacity .8s ease, transform .8s cubic-bezier(.2,.8,.2,1); }
+  .reveal.in { opacity:1; transform:none; }
+
+  .concepts { position:fixed; right:16px; bottom:16px; z-index:9; display:flex; gap:6px; background:rgba(9,12,16,.8); border:1px solid var(--line); padding:6px; border-radius:999px; font-family:var(--mono); font-size:11px; backdrop-filter:blur(12px); }
+  .concepts a { text-decoration:none; padding:6px 10px; border-radius:999px; color:var(--muted); } .concepts a.on { background:var(--text); color:var(--ink); }
+
+  @media (max-width: 900px) {
+    .fly { height:560vh; } .dots { display:none; } .faces { grid-template-columns:repeat(3, 1fr); }
+    .hero > *, .hero .lede { max-width:100%; }
+    .hero::before { content:""; position:absolute; inset:-40px -24px; z-index:-1;
+      background:radial-gradient(ellipse 78% 56% at 42% 46%, rgba(9,12,16,.94) 0%, rgba(9,12,16,.82) 50%, rgba(9,12,16,0) 84%); }
+    .grid { grid-template-columns:1fr; }
+    .snek-wrap { grid-template-columns:1fr; } .stage { padding:24px; } nav ul { display:none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity:1; transform:none; transition:none; } html { scroll-behavior:auto; } }
+</style>
+</head>
+<body>
+<div id="gl" aria-hidden="true"></div><div id="css" aria-hidden="true"></div>
+<div class="wrap">
+<nav><div class="container">
+  <a class="brand" href="#"><img src="assets/icon.png" alt="">Gitlines</a>
+  <ul><li><a href="#film">Film</a></li><li><a href="#themes">Themes</a></li><li><a href="#numbers">Numbers</a></li><li><a href="#sizes">Sizes</a></li><li><a href="#snek">Snek</a></li></ul>
+  <a class="btn ghost" href="https://github.com/yjay18/Gitlines">GitHub</a>
+</div></nav>
+
+<div class="fly" id="fly"><div class="stick"><div class="container" style="position:relative;height:100%">
+  <header class="hero" id="hero">
+    <div class="eyebrow">macOS 14 · WidgetKit · Native</div>
+    <h1>Your GitHub day,<br>on your <em>desktop.</em></h1>
+    <p class="lede">Gitlines puts your real commit activity on the Mac desktop. Exact additions, deletions, net lines, peak hours and repository rankings, pulled across every branch.</p>
+    <div class="cta"><a class="btn primary" href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download>Download for macOS</a><a class="btn ghost" href="#film">Watch the film · 21s</a></div>
+  </header>
+  <div class="fcap" id="fcap"><div class="k" id="fk"></div><h2 id="fh"></h2></div>
+  <div class="dots" id="dots"></div>
+  <div class="scrollhint" id="scrollhint">Scroll to fly the graph ↓</div>
+</div></div></div>
+
+<section id="film" class="container reveal">
+  <div class="sec-head"><h2>Twenty-one seconds.</h2></div>
+  <div class="film"><video controls playsinline preload="metadata" poster="assets/brag-poster.jpg"><source src="assets/brag.mp4" type="video/mp4"></video></div>
+  <div class="film-cap"><span>GITLINES · LAUNCH FILM</span><span>1920×1080 · 21S</span></div>
+</section>
+
+<section id="themes" class="container reveal">
+  <div class="sec-head"><h2>Changing the look never changes the numbers.</h2></div>
+  <div class="stage" id="stage"><div class="pin">+1,247 · −389 · 23 commits · pinned</div><div id="stageWidget"></div></div>
+  <div class="faces" id="faces"></div>
+</section>
+
+<section id="numbers" class="container reveal">
+  <div class="sec-head"><h2>What it counts.</h2></div>
+  <div class="grid">
+    <div class="card"><div class="k">Every branch</div><h3>Work beyond main</h3><p>Discovers recent activity on any branch and deduplicates commits that appear on more than one, by repository and SHA.</p></div>
+    <div class="card"><div class="k">Daily · Weekly · Monthly</div><h3>Per-widget periods</h3><p>Pick a period for each widget and cycle it right from the widget. Calendar windows or rolling 24h, 7d, 30d.</p></div>
+    <div class="card coral"><div class="k">Exact stats</div><h3>Additions, deletions, net</h3><p>Totals come from GitHub's per-commit statistics. Plus active intervals, peak activity, averages and repo rankings.</p></div>
+    <div class="card"><div class="k">Orgs too</div><h3>Personal and organization repos</h3><p>Connect your account, then add organizations independently with fine-grained, read-only tokens. One token per owner.</p></div>
+    <div class="card coral"><div class="k">Keychain only</div><h3>The widget never sees a token</h3><p>The host app talks to GitHub and writes snapshots to the App Group. The widget extension only reads that cache.</p></div>
+    <div class="card"><div class="k">Resilient</div><h3>Stale, not blank</h3><p>If a refresh fails the widget keeps the last good snapshot and marks it stale. Lightweight refreshes from the widget, full discovery from the app.</p></div>
+  </div>
+</section>
+
+<section id="sizes" class="container reveal">
+  <div class="sec-head"><h2>Four sizes, four layouts.</h2></div>
+  <div class="size-rack">
+    <div class="size-row r1">
+      <div class="cell"><div id="wkSmall"></div><div class="cap"><span>Small</span><span>155 × 155</span></div></div>
+      <div class="cell"><div id="wkMedium"></div><div class="cap"><span>Medium</span><span>329 × 155</span></div></div>
+    </div>
+    <div class="size-row r2">
+      <div class="cell"><div id="wkLarge"></div><div class="cap"><span>Large</span><span>329 × 345</span></div></div>
+      <div class="cell"><div id="wkXl"></div><div class="cap"><span>Extra large</span><span>681 × 345</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="snek" class="container reveal veil">
+  <div class="snek-wrap">
+    <div><div class="eyebrow">Also</div><h2>There is a snake.</h2><p class="sub">The commit snek grows one segment per commit. Its states are named <code>smol snek</code>, <code>growing snek</code> and <code>snek happy</code> in the source. That is not a joke for the website. It is in the code.</p></div>
+    <div><div class="snek-grid" id="snekGrid"></div><div class="snek-state"><span id="snekCount">0 commits</span><b id="snekState">smol snek</b></div></div>
+  </div>
+</section>
+
+<section id="get" class="get container reveal veil">
+  <img src="assets/icon.png" alt="Gitlines app icon">
+  <h2>Gitlines 1.0</h2>
+  <p class="sub" style="margin-bottom:30px">macOS 14 or newer · 3.8 MB disk image</p>
+  <div class="cta" style="justify-content:center"><a class="btn primary" href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download>Download gitlines.dmg</a><a class="btn ghost" href="https://github.com/yjay18/Gitlines">View on GitHub</a></div>
+  <p style="margin-top:18px;font-size:14px"><a href="https://github.com/yjay18/Gitlines/releases/tag/v1.0" style="color:var(--muted)">Release notes and other downloads</a></p>
+</section>
+<footer><div class="container"><span>© 2026 Gitlines. Not an official GitHub product. · <a href="privacy.html" style="color:inherit">Privacy</a></span><span>macOS 14+ · <a href="https://github.com/yjay18/Gitlines/releases/tag/v1.0" style="color:inherit">v1.0</a></span></div></footer>
+</div>
+
+<div class="concepts"><a class="on" href="index.html">A · Orbit</a><a href="concepts/phosphor.html">B · Phosphor</a><a href="concepts/broadsheet.html">C · Broadsheet</a></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+<script src="assets/widget.js"></script>
+<script src="assets/sizes.js"></script>
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches, mx = 0, my = 0;
+  addEventListener('mousemove', function(e){ mx = e.clientX/innerWidth - .5; my = e.clientY/innerHeight - .5; });
+
+  /* ---- theme stage: the faces are the picker ---- */
+  var faces = document.getElementById('faces'), stage = document.getElementById('stage'), sw = document.getElementById('stageWidget');
+  Gitlines.THEMES.forEach(function(t, i){
+    var b = document.createElement('button'); b.className = 'face f-' + t.key + (i===0?' on':''); b.setAttribute('aria-label', t.name);
+    var inner = document.createElement('div'); b.appendChild(inner); Gitlines.mount(inner, t.key);
+    b.onclick = function(){ faces.querySelectorAll('.face').forEach(function(x){ x.classList.remove('on'); }); b.classList.add('on'); show(t.key); };
+    faces.appendChild(b);
+  });
+  function show(key){ sw.style.opacity = 0; setTimeout(function(){ Gitlines.mount(sw, key); stage.className = 'stage t-bg-' + key; sw.style.opacity = 1; }, 180); }
+  Gitlines.mount(sw, 'default');
+
+  /* ---- the four real widget layouts, at their true macOS point sizes ---- */
+  GitlinesSizes.render(document.getElementById('wkSmall'), 'small');
+  GitlinesSizes.render(document.getElementById('wkMedium'), 'medium');
+  GitlinesSizes.render(document.getElementById('wkLarge'), 'large');
+  GitlinesSizes.render(document.getElementById('wkXl'), 'xl');
+
+  /* ---- snek: grows one cell per commit, serpentine ---- */
+  var grid = document.getElementById('snekGrid'), cells = [];
+  for (var i=0;i<36;i++){ var c = document.createElement('i'); grid.appendChild(c); cells.push(c); }
+  function pos(n){ var r = Math.floor(n/12), c = n%12; if (r%2) c = 11-c; return r*12+c; }
+  var n = 0, states = ['smol snek','growing snek','snek happy'];
+  function grow(){ n = (n % 24) + 1; cells.forEach(function(c){ c.className=''; });
+    for (var k=0;k<n;k++) cells[pos(k)].className = k===n-1 ? 'on head' : 'on';
+    document.getElementById('snekCount').textContent = n + (n===1?' commit':' commits');
+    document.getElementById('snekState').textContent = n<5 ? states[0] : n<15 ? states[1] : states[2]; }
+  var snekOn = false; new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting && !snekOn){ snekOn = true; grow(); setInterval(grow, reduce ? 4000 : 420); } }); }).observe(grid);
+
+  /* ---- reveal on scroll ---- */
+  var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold:.12 });
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+
+  /* ---- three.js: fly the git graph, then dive into the logo ----
+     One scene for the whole page. The trunk runs past six theme nodes (live DOM widgets via CSS3D),
+     then bends down and splits into the two inflows of the Gitlines mark, which stays as the page background. */
+  if (!window.THREE) return;
+  var order = Gitlines.THEMES.map(function(t){ return t.key; }), SP = 9;
+  var scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x090C10, .042);
+  var cssScene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(50, 1, .1, 300);
+  var gl = new THREE.WebGLRenderer({ antialias:true, alpha:true }); gl.setPixelRatio(Math.min(devicePixelRatio, 2)); document.getElementById('gl').appendChild(gl.domElement);
+  var cssEl = document.getElementById('css'), css = THREE.CSS3DRenderer ? new THREE.CSS3DRenderer() : null; if (css) cssEl.appendChild(css.domElement);
+  var chalk = new THREE.MeshStandardMaterial({ color:0xEDECE8, roughness:.4, emissive:0x2a2a2a });
+  var green = new THREE.MeshStandardMaterial({ color:0x38CC75, emissive:0x38CC75, emissiveIntensity:.55 });
+  var coral = new THREE.MeshStandardMaterial({ color:0xF26166, emissive:0xF26166, emissiveIntensity:.55 });
+  var V = THREE.Vector3;
+
+  /* the mark: same geometry as the logo, scaled up, sitting below and beyond the last node */
+  var mark = new THREE.Group(); mark.position.set(1.5, -4.2, -SP*8.6); mark.rotation.set(.22, -.38, .04); mark.scale.setScalar(1.35); scene.add(mark);
+  var curves = [
+    new THREE.CubicBezierCurve3(new V(-6, 1.4, -1.2), new V(-3, 1.4, -.6), new V(-1.6, 0, .2), new V(0,0,0)),
+    new THREE.CubicBezierCurve3(new V(-6,-1.4, .9), new V(-3,-1.4, .4), new V(-1.6, 0, -.2), new V(0,0,0)),
+    new THREE.CubicBezierCurve3(new V(0,0,0), new V(1.6, 0, .2), new V(3, 1.4, -.5), new V(6, 1.4, -1)),
+    new THREE.CubicBezierCurve3(new V(0,0,0), new V(1.6, 0, -.2), new V(3,-1.4, .6), new V(6,-1.4, 1.2))
+  ];
+  curves.forEach(function(c, i){ mark.add(new THREE.Mesh(new THREE.TubeGeometry(c, 80, .12, 12, false), i<2 ? chalk : (i===2 ? green : coral))); });
+  mark.add(new THREE.Mesh(new THREE.SphereGeometry(.46, 48, 48), new THREE.MeshStandardMaterial({ color:0x18191E, roughness:.4 })));
+  mark.add(new THREE.Mesh(new THREE.TorusGeometry(.5, .12, 16, 64), chalk));
+  mark.add(new THREE.Mesh(new THREE.SphereGeometry(.15, 24, 24), chalk));
+  var plus = new THREE.Group(); plus.add(new THREE.Mesh(new THREE.BoxGeometry(.8,.2,.2), green)); plus.add(new THREE.Mesh(new THREE.BoxGeometry(.2,.8,.2), green)); plus.position.set(6.9, 1.4, -1); mark.add(plus);
+  var minus = new THREE.Mesh(new THREE.BoxGeometry(.8,.2,.2), coral); minus.position.set(6.9, -1.4, 1.2); mark.add(minus);
+  mark.updateMatrixWorld(true);
+  var inTop = mark.localToWorld(new V(-6, 1.4, -1.2)), inBot = mark.localToWorld(new V(-6, -1.4, .9));
+
+  /* trunk: past the six nodes, then a dive that splits into the mark's two inflows */
+  var trunkPts = []; for (var z=4; z>=-SP*7; z-=1) trunkPts.push(new V(Math.sin(z*.25)*.6, Math.cos(z*.2)*.3 - .9, z));
+  var tEnd = trunkPts[trunkPts.length-1].clone(), fork = new V(tEnd.x - .4, tEnd.y - 2.2, tEnd.z - 3.2);
+  trunkPts.push(fork);
+  var trunk = new THREE.CatmullRomCurve3(trunkPts); scene.add(new THREE.Mesh(new THREE.TubeGeometry(trunk, 260, .075, 10, false), chalk));
+  [inTop, inBot].forEach(function(dst, k){
+    var c = new THREE.CubicBezierCurve3(fork.clone(), new V(fork.x, fork.y - 1.6, fork.z - 1.5), new V(dst.x - 1.2, dst.y + (k? -.6 : .6), dst.z + 1.5), dst);
+    scene.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, .075, 10, false), chalk));
+  });
+  var forkNode = new THREE.Mesh(new THREE.SphereGeometry(.16, 20, 20), chalk); forkNode.position.copy(fork); scene.add(forkNode);
+
+  /* six theme nodes with the live widget hanging at each */
+  var nodes = [], objs = [];
+  order.forEach(function(key, i){
+    var z = -SP*(i+1), side = i%2 ? 1 : -1, tp = trunk.getPointAt(Math.min(1, (4 - z)/(4 + SP*7 + 3.2)));
+    var end = new V(side*2.6, .9, z);
+    var br = new THREE.CubicBezierCurve3(tp.clone(), new V(tp.x, tp.y, z+2.5), new V(end.x, end.y-1.2, z+1.2), end);
+    scene.add(new THREE.Mesh(new THREE.TubeGeometry(br, 40, .05, 8, false), i%3===2 ? coral : (i%3===1 ? green : chalk)));
+    var sph = new THREE.Mesh(new THREE.SphereGeometry(.16, 20, 20), chalk); sph.position.copy(end); scene.add(sph); nodes.push(sph);
+    if (!css) return;
+    var el = document.createElement('div'); el.className = 'node';
+    var wd = document.createElement('div'); el.appendChild(wd); Gitlines.mount(wd, key);
+    var o = new THREE.CSS3DObject(el); o.position.set(end.x + side*.3, end.y + 1.6, z); o.rotation.y = -side*.35; o.scale.setScalar(.0055); cssScene.add(o); objs.push(o);
+  });
+  /* commits riding the trunk and the mark's branches */
+  var riders = [];
+  for (var r=0;r<40;r++){ var m = new THREE.Mesh(new THREE.SphereGeometry(.07, 10, 10), r%3===0 ? green : (r%3===1 ? coral : chalk)); m.userData = { t: Math.random(), s: .0006 + Math.random()*.0008 }; scene.add(m); riders.push(m); }
+  var markRiders = [];
+  for (var q=0;q<20;q++){ var ci = q%4, mm = new THREE.Mesh(new THREE.SphereGeometry(.08, 10, 10), ci<2 ? chalk : (ci===2 ? green : coral)); mm.userData = { c: ci, t: Math.random(), s: .002 + Math.random()*.002 }; mark.add(mm); markRiders.push(mm); }
+  /* dust */
+  var pts = new Float32Array(3000*3); for (var p=0;p<pts.length;p+=3){ pts[p] = (Math.random()-.5)*34; pts[p+1] = (Math.random()-.5)*20 - 2; pts[p+2] = 8 - Math.random()*SP*11; }
+  var g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pts, 3)); var dust = new THREE.Points(g, new THREE.PointsMaterial({ color:0x8592A3, size:.05, transparent:true, opacity:.5 })); scene.add(dust);
+  scene.add(new THREE.AmbientLight(0xffffff, .5)); var dl = new THREE.DirectionalLight(0xffffff, .9); dl.position.set(2, 5, 4); scene.add(dl);
+  var pl = new THREE.PointLight(0x38CC75, 1.3, 16); scene.add(pl);
+  var l1 = new THREE.PointLight(0x38CC75, 1.6, 26); l1.position.copy(mark.localToWorld(new V(5, 3, 3))); scene.add(l1);
+  var l2 = new THREE.PointLight(0xF26166, 1.3, 26); l2.position.copy(mark.localToWorld(new V(-4, -3, 3))); scene.add(l2);
+
+  /* ---- overlays ---- */
+  var hero = document.getElementById('hero'), fcap = document.getElementById('fcap'), dots = document.getElementById('dots'), hint = document.getElementById('scrollhint');
+  order.forEach(function(){ dots.appendChild(document.createElement('i')); });
+  var fly = document.getElementById('fly'), target = 0, cur = 0, curI = -1;
+  var mc = mark.position.clone(), stops = [], SEGS = 0;
+  function buildStops(){
+    var narrow = innerWidth < 900, standoff = narrow ? 13.5 : (innerWidth < 1200 ? 9.5 : 7.5);
+    stops = [{ pos: new V(narrow ? 0 : -2.4, .5, 9.5), look: new V(narrow ? 0 : .8, -.6, -8) }];   /* hero: tunnel only, no widget in frame */
+    (objs.length ? objs : nodes).forEach(function(o){
+      var y = objs.length ? o.position.y*.6 + .4 : o.position.y + 1.2;
+      /* narrow viewports centre the widget in frame; wide ones keep it off-axis */
+      stops.push({ pos: new V(o.position.x * (narrow ? 1 : .55), y, o.position.z + standoff), look: new V(o.position.x * (narrow ? 1 : .7), o.position.y*.6 - .1, o.position.z - 4) });
+    });
+    stops.push({ pos: new V(mc.x + .8, mc.y + 1.4, mc.z + (narrow ? 21 : 14.5)), look: new V(mc.x, mc.y - .2, mc.z) });   /* the mark */
+    SEGS = stops.length;
+  }
+  buildStops();
+  function stretch(p){ var seg = p*SEGS, i = Math.floor(seg), t = seg - i; if (i>=SEGS) return SEGS; var m = t < .55 ? 0 : (t-.55)/.45; return i + (m<.5 ? 4*m*m*m : 1-Math.pow(-2*m+2,3)/2); }
+  function resize(){ var w = innerWidth, h = innerHeight; cam.aspect = w/h; cam.updateProjectionMatrix(); gl.setSize(w, h); if (css) css.setSize(w, h); buildStops(); }
+  addEventListener('resize', resize); resize();
+  var sy = 0, flyEnd = 0;
+  function onScroll(){ sy = scrollY; var r = fly.getBoundingClientRect(); flyEnd = r.height - innerHeight; target = Math.min(1, Math.max(0, -r.top/flyEnd)); }
+  addEventListener('scroll', onScroll, { passive:true }); onScroll();
+  var last = 0, lookCur = stops[0].look.clone();
+  function frame(now){
+    var dt = Math.min(48, now - last); last = now;
+    cur += (target - cur) * .08; var s = stretch(cur), i = Math.min(SEGS-1, Math.round(s)), st = stops[i];
+    var past = Math.max(0, sy - flyEnd);                     /* scrolling the rest of the page: slow orbit around the mark */
+    var tx = st.pos.x + mx*.6, ty = st.pos.y - my*.4, tz = st.pos.z;
+    if (i === SEGS-1){ tx += Math.sin(past*.0006)*2.2; ty += -past*.0012; tz += Math.min(3, past*.002); }
+    cam.position.x += (tx - cam.position.x)*.08; cam.position.y += (ty - cam.position.y)*.08; cam.position.z += (tz - cam.position.z)*.08;
+    lookCur.lerp(st.look, .08); cam.lookAt(lookCur);
+    var ni = i - 1;                                            /* stop 0 is the hero, so node index trails by one */
+    if (ni >= 0 && ni < nodes.length){ pl.position.copy(nodes[ni].position); pl.position.y += 1.2; } else { pl.position.copy(forkNode.position); }
+    nodes.forEach(function(n, k){ n.scale.setScalar(k===ni ? 1.6 : 1); });
+    if (!reduce){
+      riders.forEach(function(m){ m.userData.t += m.userData.s * dt/16; if (m.userData.t > 1) m.userData.t = 0; trunk.getPointAt(m.userData.t, m.position); });
+      markRiders.forEach(function(m){ m.userData.t += m.userData.s * dt/16; if (m.userData.t > 1) m.userData.t = 0; curves[m.userData.c].getPointAt(m.userData.t, m.position); });
+      mark.rotation.y = -.38 + Math.sin(now*.00012)*.06 + mx*.15; mark.rotation.x = .22 - my*.1;
+      dust.rotation.y += .00004*dt;
+    }
+    if (i !== curI){ curI = i;
+      var atMark = i === SEGS-1;
+      fcap.classList.toggle('on', atMark); dots.classList.toggle('on', i > 0 && !atMark);
+      if (atMark){ document.getElementById('fk').textContent = 'Every branch'; document.getElementById('fh').textContent = 'It all flows into Gitlines.'; }
+      [].forEach.call(dots.children, function(d, k){ d.classList.toggle('on', k===ni); });
+    }
+    var heroFade = Math.max(0, Math.min(1, (.8 - s)/.45));     /* clear of the copy before the first widget arrives */
+    hero.style.opacity = heroFade; hero.style.pointerEvents = heroFade > .5 ? 'auto' : 'none';
+    hint.style.opacity = Math.max(0, Math.min(1, (.35 - s)/.3));
+    /* widgets fade in once the flight leaves the hero, and vanish the moment it ends */
+    var flightOver = target >= .995 || i === SEGS-1;
+    var wOpacity = flightOver ? 0 : Math.max(0, Math.min(1, (s - .5)/.35));
+    cssEl.style.opacity = wOpacity;
+    gl.render(scene, cam); if (css && wOpacity > 0) css.render(cssScene, cam);
+    requestAnimationFrame(frame);
+  }
+  cam.position.copy(stops[0].pos); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

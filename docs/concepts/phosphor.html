@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gitlines — $ gitlines --today</title>
+<meta name="description" content="Gitlines is a native macOS widget for your real GitHub commit activity: additions, deletions, net lines, peak hours and repository rankings.">
+<link rel="icon" href="../assets/favicon.png">
+<link rel="stylesheet" href="../assets/widget.css">
+<style>
+  :root { --ink:#06090A; --g:#4AF08A; --dim:#2C8F58; --dimmer:#155a35; --amber:#FFB340; --line:rgba(74,240,138,.18); --mono: ui-monospace, "SF Mono", Menlo, "JetBrains Mono", "Courier New", monospace; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--ink); color:var(--g); font-family:var(--mono); font-size:15px; line-height:1.6; overflow-x:hidden; }
+  a { color:var(--g); }
+  /* CRT */
+  body::before { content:""; position:fixed; inset:0; z-index:8; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px); mix-blend-mode:multiply; }
+  body::after { content:""; position:fixed; inset:0; z-index:8; pointer-events:none; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
+  .glow { text-shadow:0 0 6px rgba(74,240,138,.55), 0 0 22px rgba(74,240,138,.18); }
+  #grid { position:fixed; inset:0; z-index:0; opacity:.9; }
+  .wrap { position:relative; z-index:1; }
+  .container { width:min(1120px, calc(100% - 40px)); margin:0 auto; }
+  nav { position:sticky; top:0; z-index:5; background:rgba(6,9,10,.82); border-bottom:1px solid var(--line); }
+  nav .container { display:flex; justify-content:space-between; align-items:center; height:52px; font-size:13px; }
+  nav a { text-decoration:none; color:var(--dim); } nav a:hover { color:var(--g); } nav .brand { color:var(--g); font-weight:700; }
+  nav ul { display:flex; gap:22px; list-style:none; margin:0; padding:0; }
+  .hero { min-height:100vh; display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:center; padding:70px 0 40px; }
+  .term { border:1px solid var(--line); border-radius:8px; background:rgba(6,9,10,.86); box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 40px 120px rgba(0,0,0,.7), inset 0 0 80px rgba(74,240,138,.05); overflow:hidden; }
+  .term-bar { display:flex; gap:7px; padding:11px 14px; border-bottom:1px solid var(--line); font-size:12px; color:var(--dim); }
+  .term-bar i { width:11px; height:11px; border-radius:50%; border:1px solid var(--dim); display:inline-block; }
+  .term pre { margin:0; padding:22px 24px; font:inherit; white-space:pre-wrap; min-height:270px; }
+  .cursor::after { content:"█"; animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  .big { font-size:clamp(56px, 8vw, 120px); line-height:1; font-weight:700; letter-spacing:-.02em; }
+  .big .d { color:var(--amber); }
+  h1 { font-size:clamp(28px, 3.4vw, 44px); line-height:1.15; margin:26px 0 14px; font-weight:700; }
+  .lede { color:var(--dim); max-width:56ch; margin:0 0 28px; }
+  .btn { display:inline-block; padding:10px 18px; border:1px solid var(--g); text-decoration:none; color:var(--g); margin-right:10px; transition:all .15s; }
+  .btn:hover, .btn.solid { background:var(--g); color:var(--ink); }
+  .btn.solid:hover { box-shadow:0 0 30px rgba(74,240,138,.4); }
+  section { padding:100px 0; }
+  h2 { font-size:clamp(26px, 3vw, 40px); margin:0 0 8px; font-weight:700; }
+  h2::before { content:"## "; color:var(--dim); }
+  .sub { color:var(--dim); margin:0 0 40px; max-width:66ch; }
+  .film { border:1px solid var(--line); background:#000; box-shadow:0 0 60px rgba(74,240,138,.08), 0 40px 100px rgba(0,0,0,.7); }
+  .film video { display:block; width:100%; }
+  .cmds { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+  .cmd { background:transparent; border:1px solid var(--line); color:var(--dim); font:inherit; padding:8px 14px; cursor:pointer; }
+  .cmd:hover { color:var(--g); border-color:var(--g); } .cmd.on { background:var(--g); color:var(--ink); border-color:var(--g); }
+  .cmd b { opacity:.6; margin-right:8px; font-weight:400; }
+  .cmd { display:flex; align-items:center; } .cmd .mini { display:block; width:104px; } .cmd .mini .w { padding:1.6em 2em; }
+  .stage { padding:44px; border:1px solid var(--line); background:rgba(6,9,10,.6); position:relative; }
+  .stage.bg-broadsheet { background:#E9E4D5; } .stage.bg-arcade { background:#0F380F; } .stage.bg-glasshouse { background:linear-gradient(135deg,#2a2f3a,#1C1D21 55%,#3a2f38); } .stage.bg-default, .stage.bg-blockwork { background:#090C10; }
+  .stage .pin { position:absolute; right:14px; top:12px; font-size:11px; color:var(--dim); letter-spacing:.1em; }
+  .stage.bg-broadsheet .pin { color:#6D6555; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td, th { text-align:left; padding:12px 10px; border-bottom:1px dashed var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:400; width:220px; } td { color:var(--g); } td span { color:var(--dim); display:block; margin-top:2px; }
+  .sizes { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+  .size { border:1px solid var(--line); padding:18px; aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between; transition:box-shadow .2s; }
+  .size:hover { box-shadow:inset 0 0 40px rgba(74,240,138,.12); }
+  .size small { color:var(--dim); } .size .n { font-size:26px; font-weight:700; } .size .n i { color:var(--amber); font-style:normal; }
+  .size.m { grid-column:span 2; aspect-ratio:2/1; } .size.l { grid-column:span 2; aspect-ratio:auto; } .size.xl { grid-column:span 4; aspect-ratio:auto; }
+  .get { text-align:center; padding:120px 0 90px; }
+  .get img { width:96px; height:96px; border-radius:22px; filter:saturate(.2) sepia(1) hue-rotate(90deg) brightness(.9); margin-bottom:24px; }
+  footer { border-top:1px solid var(--line); padding:22px 0; color:var(--dim); font-size:12px; }
+  footer .container { display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .concepts { position:fixed; right:16px; bottom:16px; z-index:9; display:flex; gap:6px; background:rgba(6,9,10,.9); border:1px solid var(--line); padding:6px; font-size:11px; }
+  .concepts a { text-decoration:none; padding:6px 10px; color:var(--dim); } .concepts a.on { background:var(--g); color:var(--ink); }
+  @media (max-width:900px){ .hero { grid-template-columns:1fr; padding-top:40px; } nav ul { display:none; } .sizes { grid-template-columns:1fr 1fr; } .size.xl { grid-column:span 2; } .stage { padding:18px; } th { width:auto; display:block; padding-bottom:0; } td { display:block; } }
+</style>
+</head>
+<body>
+<canvas id="grid" aria-hidden="true"></canvas>
+<div class="wrap">
+<nav><div class="container"><a class="brand glow" href="#">gitlines/</a><ul><li><a href="#film">film</a></li><li><a href="#themes">themes</a></li><li><a href="#numbers">numbers</a></li><li><a href="#sizes">sizes</a></li></ul><a href="https://github.com/yjay18/Gitlines">github ↗</a></div></nav>
+
+<header class="hero container">
+  <div>
+    <div class="big glow" id="big"><span class="a">+0</span><br><span class="d">−0</span></div>
+    <h1>Your GitHub day. On the desktop. In a terminal, if you want.</h1>
+    <p class="lede">Gitlines is a native macOS widget for real commit activity: exact additions, deletions, net lines, peak hours, repo rankings. Every branch. Deduplicated by SHA.</p>
+    <a class="btn solid" href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download>download .dmg</a><a class="btn" href="#film">watch --film</a>
+  </div>
+  <div class="term"><div class="term-bar"><i></i><i></i><i></i><span style="margin-left:8px">gitlines — zsh — 80×24</span></div><pre id="out" class="cursor"></pre></div>
+</header>
+
+<section id="film" class="container">
+  <h2>film</h2>
+  <div class="film"><video controls playsinline preload="metadata" poster="../assets/brag-poster.jpg"><source src="../assets/brag.mp4" type="video/mp4"></video></div>
+</section>
+
+<section id="themes" class="container">
+  <h2>themes</h2><p class="sub">Changing the look never changes the numbers. Click a face, or press a number key.</p>
+  <div class="cmds" id="cmds"></div>
+  <div class="stage bg-phosphor" id="stage"><div class="pin">+1,247 · −389 · 23 COMMITS · PINNED</div><div id="stageWidget"></div></div>
+</section>
+
+<section id="numbers" class="container">
+  <h2>numbers</h2><p class="sub">Not a contribution graph. The arithmetic of your day.</p>
+  <table>
+    <tr><th>--branches all</th><td>Discovers recent work beyond the default branch.<span>Commits reachable from more than one branch are deduplicated by repo + SHA.</span></td></tr>
+    <tr><th>--period daily|weekly|monthly</th><td>A period per widget, cycled from the widget itself.<span>Calendar windows, or rolling 24h / 7d / 30d. Both cached so the switch is instant.</span></td></tr>
+    <tr><th>--stats exact</th><td>Additions, deletions, net, active intervals, peak, averages, repo rankings.<span>Totals come from GitHub's per-commit statistics, not estimates.</span></td></tr>
+    <tr><th>--owner personal|org</th><td>Connect your account, add organizations independently.<span>Fine-grained read-only tokens, one per owner, stored only in Keychain.</span></td></tr>
+    <tr><th>--boundary</th><td>The widget extension never sees a token.<span>The host app fetches and writes snapshots to the App Group; the widget only reads that cache.</span></td></tr>
+    <tr><th>--on-failure stale</th><td>Keeps the last good snapshot and marks it stale.<span>Lightweight refresh from the widget, full branch discovery from the app.</span></td></tr>
+  </table>
+</section>
+
+<section id="sizes" class="container">
+  <h2>sizes</h2><p class="sub">Small, medium, large, extra-large. Four hand-built layouts, not one stretched design.</p>
+  <div class="sizes">
+    <div class="size"><small>small</small><div class="n">+1,247<br><i>−389</i></div></div>
+    <div class="size"><small>small · arcade</small><div class="n">SCORE 23<br><i>HI 41</i></div></div>
+    <div class="size m"><small>medium</small><div class="n">+1,247 <i>−389</i> · 23 commits<br><span style="letter-spacing:.1em">▂▃▃▅█▆▄▂▃▆█▄</span></div></div>
+    <div class="size l"><small>large</small><div class="n">+1,247 <i>−389</i><br><span style="font-size:14px;font-weight:400;color:var(--dim)">gitlines/ +842 −201<br>thesis-icu/ +301 −144<br>widtget-app/ +104 −44</span></div></div>
+    <div class="size l"><small>large · phosphor</small><div class="n"><span style="font-size:14px;font-weight:400">$ git log --since=1.day --author=me<br>23 commits · peak 14:00 · avg 1.9/h<br>▂▃▃▅█▆▄▂▃▆█▄ ▂▁▁▂▃▅▆█▇▅▃▂</span></div></div>
+    <div class="size xl"><small>extra large</small><div class="n">+1,247 <i>−389</i> · net +858 · 23 commits · 3 repos · peak 14:00–15:00 · <span style="letter-spacing:.1em">▂▃▃▅█▆▄▂▃▆█▄▂▁▁▂▃▅▆█▇▅▃▂</span></div></div>
+  </div>
+</section>
+
+<section id="get" class="get container">
+  <img src="../assets/icon.png" alt="Gitlines app icon">
+  <h2 style="display:inline-block">gitlines 1.0</h2>
+  <p class="sub" style="margin:8px auto 30px">macOS 14+ · 3.8 MB disk image<br><span style="opacity:.6">also: a snake</span></p>
+  <a class="btn solid" href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download>download gitlines.dmg</a><a class="btn" href="https://github.com/yjay18/Gitlines">github repo</a>
+</section>
+<footer><div class="container"><span>© 2026 gitlines · not an official GitHub product</span><span><a href="https://github.com/yjay18/Gitlines/releases/tag/v1.0" style="color:inherit">v1.0</a> · smol snek → growing snek → snek happy</span></div></footer>
+</div>
+<div class="concepts"><a href="../index.html">A · Orbit</a><a class="on" href="phosphor.html">B · Phosphor</a><a href="broadsheet.html">C · Broadsheet</a></div>
+
+<script src="../assets/widget.js"></script>
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function fmt(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+
+  /* ---- typed terminal ---- */
+  var lines = ['$ gitlines --today', '', '  @yjay18 · daily · across every branch', '', '  +1,247  additions', '  −389    deletions', '  +858    net', '  23      commits · 3 repos', '  14:00   peak · 1.9/h avg', '', '  gitlines/      +842  −201', '  thesis-icu/    +301  −144', '  widtget-app/   +104   −44', '', '  snek: growing snek', '$ '];
+  var out = document.getElementById('out'), li = 0, ch = 0;
+  function type(){ if (li >= lines.length) return; var L = lines[li]; if (ch <= L.length){ out.textContent = lines.slice(0, li).join('\n') + (li?'\n':'') + L.slice(0, ch); ch++; setTimeout(type, reduce ? 0 : (li===0 ? 55 : 12)); } else { li++; ch = 0; setTimeout(type, reduce ? 0 : (li===1 ? 350 : 70)); } }
+  type();
+  /* count-up */
+  var a = document.querySelector('#big .a'), d = document.querySelector('#big .d'), t0 = performance.now();
+  (function tick(){ var p = Math.min(1, (performance.now()-t0)/(reduce?1:1600)), e = 1-Math.pow(1-p,3); a.textContent = '+' + fmt(Math.round(1247*e)); d.textContent = '−' + fmt(Math.round(389*e)); if (p<1) requestAnimationFrame(tick); })();
+
+  /* ---- theme switcher (click or keys 1-6) ---- */
+  var cmds = document.getElementById('cmds'), stage = document.getElementById('stage'), sw = document.getElementById('stageWidget');
+  function show(i){ var t = Gitlines.THEMES[i]; cmds.querySelectorAll('.cmd').forEach(function(b, j){ b.classList.toggle('on', j===i); }); Gitlines.mount(sw, t.key); stage.className = 'stage bg-' + t.key; }
+  Gitlines.THEMES.forEach(function(t, i){ var b = document.createElement('button'); b.className = 'cmd'; b.innerHTML = '<b>[' + (i+1) + ']</b>'; var mini = document.createElement('span'); mini.className = 'mini'; b.appendChild(mini); Gitlines.mount(mini, t.key); b.onclick = function(){ show(i); }; cmds.appendChild(b); });
+  show(2);
+  addEventListener('keydown', function(e){ var k = parseInt(e.key, 10); if (k>=1 && k<=6 && !e.metaKey && !e.ctrlKey) show(k-1); });
+
+  /* ---- background: phosphor grid with a commit snek crawling it ----
+     one segment per commit; 1-4 smol, 5-14 growing, 15+ happy; then it sheds and starts again. */
+  var cv = document.getElementById('grid'), cx = cv.getContext('2d'), W, H, cell = 34, cols, rows, snake = [], head, dir = [1,0], len = 1, tickAt = 0, fade = [];
+  function resize(){ W = cv.width = innerWidth * Math.min(devicePixelRatio, 2); H = cv.height = innerHeight * Math.min(devicePixelRatio, 2); cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px'; cols = Math.ceil(innerWidth/cell); rows = Math.ceil(innerHeight/cell); head = [Math.floor(cols*.62), Math.floor(rows*.3)]; snake = [head.slice()]; len = 1; }
+  addEventListener('resize', resize); resize();
+  function step(){
+    /* wander: mostly straight, sometimes turn, never off-grid, avoid self */
+    var opts = [[1,0],[-1,0],[0,1],[0,-1]].filter(function(v){ var n = [head[0]+v[0], head[1]+v[1]]; return n[0]>=0 && n[0]<cols && n[1]>=1 && n[1]<rows-1 && !snake.some(function(s){ return s[0]===n[0] && s[1]===n[1]; }); });
+    if (!opts.length){ fade = snake; snake = []; len = 1; head = [Math.floor(Math.random()*cols), Math.floor(Math.random()*rows)]; snake.push(head.slice()); return; }
+    var keep = opts.find(function(v){ return v[0]===dir[0] && v[1]===dir[1]; });
+    dir = (keep && Math.random() < .8) ? keep : opts[Math.floor(Math.random()*opts.length)];
+    head = [head[0]+dir[0], head[1]+dir[1]]; snake.push(head.slice());
+    len = Math.min(len + 1, 34); if (snake.length > len) snake.shift();
+    if (len >= 34 && Math.random() < .03){ fade = snake; snake = [head.slice()]; len = 1; }
+  }
+  function draw(now){
+    if (!reduce && now > tickAt){ step(); tickAt = now + 110; }
+    var s = Math.min(devicePixelRatio, 2); cx.setTransform(s,0,0,s,0,0); cx.clearRect(0,0,innerWidth,innerHeight);
+    cx.strokeStyle = 'rgba(74,240,138,.07)'; cx.lineWidth = 1; cx.beginPath();
+    for (var x=0;x<=cols;x++){ cx.moveTo(x*cell+.5,0); cx.lineTo(x*cell+.5,innerHeight); } for (var y=0;y<=rows;y++){ cx.moveTo(0,y*cell+.5); cx.lineTo(innerWidth,y*cell+.5); } cx.stroke();
+    if (fade.length){ cx.fillStyle = 'rgba(74,240,138,.12)'; fade.forEach(function(p){ cx.fillRect(p[0]*cell+4, p[1]*cell+4, cell-8, cell-8); }); if (Math.random()<.05) fade = []; }
+    snake.forEach(function(p, i){ var t = (i+1)/snake.length; cx.fillStyle = 'rgba(74,240,138,' + (.18 + t*.7) + ')'; cx.shadowColor = 'rgba(74,240,138,.8)'; cx.shadowBlur = i===snake.length-1 ? 18 : 0; cx.fillRect(p[0]*cell+4, p[1]*cell+4, cell-8, cell-8); });
+    cx.shadowBlur = 0; cx.fillStyle = 'rgba(44,143,88,.9)'; cx.font = '12px ui-monospace, Menlo, monospace';
+    cx.fillText((snake.length < 5 ? 'smol snek' : snake.length < 15 ? 'growing snek' : 'snek happy') + ' · ' + snake.length + (snake.length===1?' commit':' commits'), head[0]*cell + cell + 6, head[1]*cell + cell*.66);
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

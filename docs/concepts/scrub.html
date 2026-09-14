@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gitlines — scroll the film</title>
+<link rel="icon" href="../assets/favicon.png">
+<style>
+  :root { --ink:#090C10; --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --coral:#F26166; --line:rgba(255,255,255,.09);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Inter, Arial, sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ink); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+  .hint { position:fixed; left:0; right:0; top:0; z-index:3; display:flex; justify-content:space-between; padding:18px 24px; font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); mix-blend-mode:difference; }
+  .scrub { height:700vh; position:relative; }
+  .stick { position:sticky; top:0; height:100vh; overflow:hidden; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .cap { pointer-events:auto; position:absolute; left:6vw; bottom:12vh; max-width:520px; opacity:0; transform:translateY(18px); transition:opacity .35s, transform .45s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
+  .cap.on { opacity:1; transform:none; }
+  .cap .k { font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--green); margin-bottom:10px; }
+  .cap h2 { font-size:clamp(28px, 4vw, 52px); line-height:1.02; letter-spacing:-.03em; margin:0 0 10px; }
+  .cap p { margin:0; color:var(--muted); font-size:16px; line-height:1.5; }
+  .themes { position:absolute; right:6vw; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px; font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:rgba(255,255,255,.28); opacity:0; transition:opacity .3s; }
+  .themes.on { opacity:1; } .themes span { transition:color .2s, transform .2s; } .themes span.on { color:var(--text); transform:translateX(-8px); }
+  .themes span.on::before { content:"● "; color:var(--green); }
+  .bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--line); }
+  .bar i { display:block; height:100%; width:0; background:var(--green); }
+  .tc { position:absolute; right:24px; bottom:14px; font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing:.1em; }
+  .load { position:absolute; inset:0; display:grid; place-items:center; font-family:var(--mono); font-size:12px; letter-spacing:.2em; color:var(--muted); background:var(--ink); transition:opacity .5s; }
+  .load.off { opacity:0; pointer-events:none; }
+  .after { padding:120px 6vw; max-width:720px; }
+  .after h2 { font-size:clamp(32px,4vw,54px); letter-spacing:-.03em; margin:0 0 14px; }
+  .after p { color:var(--muted); font-size:18px; line-height:1.5; }
+  .after a { color:var(--text); }
+  @media (max-width:800px){ .cap { left:5vw; right:5vw; bottom:10vh; } .themes { display:none; } }
+</style>
+</head>
+<body>
+<div class="hint"><span>Gitlines · the film</span><span>Scroll to play ↓</span></div>
+<div class="scrub" id="scrub">
+  <div class="stick">
+    <canvas id="c"></canvas>
+    <div class="cap" data-from="0" data-to=".17"><div class="k">01 · The number</div><h2>Today. Across every branch.</h2><p>Exact additions and deletions, deduplicated by SHA. Not a contribution graph.</p></div>
+    <div class="cap" data-from=".17" data-to=".37"><div class="k">02 · It's a widget</div><h2>It lives on your desktop.</h2><p>A native macOS WidgetKit widget. Small, medium, large and extra-large, each hand-built.</p></div>
+    <div class="cap" data-from=".37" data-to=".67"><h2>Changing the look never changes the numbers.</h2></div>
+    <div class="cap" data-from=".67" data-to=".85"><div class="k">04 · Also</div><h2>There is a snake.</h2><p>smol snek → growing snek → snek happy. One segment per commit. It is in the source.</p></div>
+    <div class="cap" data-from=".85" data-to="1.01"><div class="k">05 · Gitlines</div><h2>Gitlines 1.0</h2><p>macOS 14+ · <a href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download style="color:var(--green)">download the disk image</a></p></div>
+    <div class="themes" id="themes"><span>Default</span><span>Glasshouse</span><span>Phosphor</span><span>Broadsheet</span><span>Arcade</span><span>Blockwork</span></div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="tc" id="tc">00:00.0 / 00:21.0</div>
+    <div class="load" id="load">LOADING FILM · 0%</div>
+  </div>
+</div>
+<section class="after">
+  <h2>That was the whole film.</h2>
+  <p>252 frames at 12 fps, drawn to a canvas from your scroll position. No video element, so it scrubs smoothly in Safari too, and works backwards. <a href="../index.html">Back to concept A</a>.</p>
+</section>
+
+<script>
+(function(){
+  var N = 252, FPS = 12, DUR = 21, frames = new Array(N), loaded = 0;
+  var cv = document.getElementById('c'), cx = cv.getContext('2d'), scrub = document.getElementById('scrub');
+  var caps = [].slice.call(document.querySelectorAll('.cap')), themes = document.getElementById('themes'), chips = [].slice.call(themes.children);
+  var bar = document.getElementById('bar'), tc = document.getElementById('tc'), load = document.getElementById('load');
+  /* theme swaps happen at these film seconds (from the composition) */
+  var SWAPS = [7.9, 8.96, 10.01, 11.06, 12.12, 13.18, 14.2];
+  var src = function(i){ return '../assets/film/f' + String(i+1).padStart(3,'0') + '.jpg'; };
+  var W, H, dpr; function resize(){ dpr = Math.min(devicePixelRatio, 2); W = cv.width = innerWidth*dpr; H = cv.height = innerHeight*dpr; draw(); }
+  var cur = 0, target = 0, drawn = -1;
+  function nearest(i){ for (var d=0; d<N; d++){ if (frames[i-d] && frames[i-d].complete && frames[i-d].naturalWidth) return frames[i-d]; if (frames[i+d] && frames[i+d].complete && frames[i+d].naturalWidth) return frames[i+d]; } return null; }
+  function draw(){
+    var i = Math.round(cur), img = nearest(i); if (!img) return;
+    /* cover-fit */
+    var s = Math.max(W/img.naturalWidth, H/img.naturalHeight), w = img.naturalWidth*s, h = img.naturalHeight*s;
+    cx.drawImage(img, (W-w)/2, (H-h)/2, w, h); drawn = i;
+  }
+  function ui(p){
+    var t = p*DUR; bar.style.width = (p*100) + '%';
+    tc.textContent = '00:' + String(Math.floor(t)).padStart(2,'0') + '.' + Math.floor((t%1)*10) + ' / 00:21.0';
+    caps.forEach(function(c){ c.classList.toggle('on', p >= +c.dataset.from && p < +c.dataset.to); });
+    var inCarousel = t >= SWAPS[0] && t < SWAPS[6]; themes.classList.toggle('on', inCarousel);
+    if (inCarousel){ var k = 0; for (var s=1; s<6; s++) if (t >= SWAPS[s]) k = s; chips.forEach(function(ch, j){ ch.classList.toggle('on', j===k); }); }
+  }
+  function onScroll(){ var r = scrub.getBoundingClientRect(), p = Math.min(1, Math.max(0, -r.top / (r.height - innerHeight))); target = p*(N-1); ui(p); }
+  function loop(){ cur += (target - cur) * .22; if (Math.abs(target-cur) < .05) cur = target; if (Math.round(cur) !== drawn) draw(); requestAnimationFrame(loop); }
+  /* load first frame, then the rest in order; the page is usable as soon as frame 1 is in */
+  function fetchFrom(i){ if (i >= N) return; var im = new Image(); im.onload = im.onerror = function(){ loaded++; if (loaded % 12 === 0 || loaded === N) load.textContent = 'LOADING FILM · ' + Math.round(loaded/N*100) + '%'; if (loaded === N) load.classList.add('off'); if (i === 0){ load.classList.add('off'); resize(); } if (Math.round(cur) === i) draw(); fetchFrom(i+1); }; im.src = src(i); frames[i] = im; }
+  fetchFrom(0); fetchFrom(Math.floor(N/2)); /* two lanes: front half and back half in parallel */
+  addEventListener('resize', resize); addEventListener('scroll', onScroll, { passive:true }); resize(); onScroll(); loop();
+})();
+</script>
+</body>
+</html>

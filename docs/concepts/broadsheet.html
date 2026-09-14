@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Gitlines Broadsheet</title>
+<meta name="description" content="Gitlines is a native macOS widget for your real GitHub commit activity: additions, deletions, net lines, peak hours and repository rankings.">
+<link rel="icon" href="../assets/favicon.png">
+<link rel="stylesheet" href="../assets/widget.css">
+<style>
+  :root { --paper:#E9E4D5; --paper2:#E1DBC9; --ink:#19170F; --muted:#6D6555; --red:#9E2F1B; --rule:rgba(25,23,15,.28);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif; --mono: ui-monospace, "SF Mono", Menlo, monospace; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--serif); font-size:17px; line-height:1.5; overflow-x:hidden;
+    background-image: radial-gradient(rgba(25,23,15,.09) .7px, transparent .8px); background-size: 5px 5px; }
+  a { color:inherit; }
+  .container { width:min(1180px, calc(100% - 48px)); margin:0 auto; }
+  .rule { border:0; border-top:1px solid var(--rule); margin:0; } .rule.thick { border-top-width:3px; } .rule.double { border-top:3px double var(--ink); }
+  .masthead { text-align:center; padding:28px 0 12px; }
+  .masthead .top { display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); padding-bottom:10px; border-bottom:1px solid var(--rule); }
+  .masthead h1 { font-size:clamp(48px, 9vw, 128px); line-height:.95; letter-spacing:-.02em; margin:22px 0 14px; font-weight:700; text-transform:uppercase; }
+  .masthead h1 span { color:var(--red); }
+  .masthead .sub { font-style:italic; color:var(--muted); font-size:16px; }
+  nav { display:flex; justify-content:center; gap:34px; font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; padding:10px 0; border-top:3px double var(--ink); border-bottom:1px solid var(--ink); }
+  nav a { text-decoration:none; color:var(--muted); } nav a:hover { color:var(--ink); }
+
+  /* front page */
+  .front { display:grid; grid-template-columns:1.1fr 1fr; gap:48px; padding:44px 0 30px; align-items:start; }
+  .kicker { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--red); margin-bottom:12px; }
+  .front h2 { font-size:clamp(38px, 5vw, 68px); line-height:1.02; margin:0 0 20px; letter-spacing:-.02em; font-weight:700; }
+  .front .num { font-size:clamp(90px, 13vw, 190px); line-height:.9; font-weight:700; letter-spacing:-.04em; margin:6px 0 10px; font-variant-numeric:tabular-nums; }
+  .front .num .d { color:var(--red); font-size:.62em; display:block; margin-top:8px; }
+  .dek { font-size:19px; line-height:1.5; color:#3a362a; margin:0 0 24px; }
+  .dek::first-letter { float:left; font-size:3.4em; line-height:.8; padding:6px 8px 0 0; font-weight:700; }
+  .cta { display:inline-block; text-decoration:none; padding:12px 22px; border:2px solid var(--ink); font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; margin:0 10px 10px 0; transition:all .15s; }
+  .cta:hover, .cta.solid { background:var(--ink); color:var(--paper); }
+  .plate { border:1px solid var(--ink); padding:10px; background:var(--paper2); box-shadow: 4px 4px 0 var(--ink); }
+  .plate .cap { font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:8px 2px 0; display:flex; justify-content:space-between; }
+  .plate video { display:block; width:100%; background:#000; }
+
+  /* the fan — six cards in 3D, spread by scroll */
+  .fan-section { height:320vh; position:relative; }
+  .fan-sticky { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; perspective:1800px; }
+  .fan-head { text-align:center; margin-bottom:26px; z-index:2; }
+  .fan-head h2 { font-size:clamp(30px, 4vw, 56px); margin:0 0 6px; letter-spacing:-.02em; }
+  .fan-head p { margin:0; color:var(--muted); font-style:italic; }
+  .fan { position:relative; width:min(760px, 78vw); aspect-ratio:44/21; transform-style:preserve-3d; }
+  .fan .card { position:absolute; inset:0; transform-style:preserve-3d; will-change:transform; transition:transform .08s linear; }
+  .fan .card .w { box-shadow: 6px 6px 0 var(--ink); border-color: var(--ink); }
+  .fan .t-glasshouse .w { background:#2a2f3a; backdrop-filter:none; -webkit-backdrop-filter:none; }
+  .fan .lbl { position:absolute; left:50%; bottom:-42px; transform:translateX(-50%); font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); white-space:nowrap; opacity:0; transition:opacity .3s; }
+  .fan .card.front .lbl { opacity:1; }
+  .fan-note { margin-top:70px; font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+
+  /* columns */
+  section { padding:70px 0; }
+  .sec-title { display:flex; align-items:center; gap:18px; margin-bottom:28px; }
+  .sec-title h2 { font-size:clamp(28px, 3.4vw, 44px); margin:0; white-space:nowrap; letter-spacing:-.02em; } .sec-title hr { flex:1; }
+  .cols { columns:3; column-gap:36px; column-rule:1px solid var(--rule); }
+  .cols article { break-inside:avoid; margin-bottom:26px; }
+  .cols h3 { font-size:22px; margin:0 0 6px; line-height:1.15; } .cols p { margin:0; font-size:15.5px; color:#3a362a; }
+  .cols .k { font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--red); }
+  .sizes { display:grid; grid-template-columns:1fr 1fr 2fr; gap:14px; }
+  .size { border:1px solid var(--ink); padding:16px; min-height:140px; background:var(--paper2); }
+  .size .lbl { font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+  .size .n { font-size:40px; font-weight:700; letter-spacing:-.03em; margin-top:8px; line-height:1; } .size .d { color:var(--red); font-size:26px; font-weight:700; }
+  .size.large { grid-row:span 2; } .size.xl { grid-column:span 2; }
+  .engr { display:flex; gap:5px; align-items:flex-end; height:40px; margin-top:14px; }
+  .engr i { flex:1; background:repeating-linear-gradient(0deg, var(--ink) 0 1px, transparent 1px 3px); border-top:2px solid var(--ink); }
+  .snek { display:grid; grid-template-columns:1fr 1fr; gap:40px; align-items:center; border-top:1px solid var(--rule); border-bottom:1px solid var(--rule); padding:40px 0; }
+  .snek-grid { display:grid; grid-template-columns:repeat(12,1fr); gap:5px; }
+  .snek-grid i { aspect-ratio:1; border:1px solid var(--rule); transition:background .2s; } .snek-grid i.on { background:var(--ink); } .snek-grid i.head { background:var(--red); }
+  .snek-state { font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:12px; display:flex; justify-content:space-between; }
+  .get { text-align:center; padding:80px 0 60px; }
+  .get img { width:104px; height:104px; border-radius:24px; border:1px solid var(--ink); box-shadow:4px 4px 0 var(--ink); margin-bottom:22px; }
+  .get h2 { font-size:clamp(32px, 4.6vw, 62px); margin:0 0 14px; letter-spacing:-.02em; }
+  footer { border-top:3px double var(--ink); padding:18px 0 40px; font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+  footer .container { display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .concepts { position:fixed; right:16px; bottom:16px; z-index:9; display:flex; gap:6px; background:var(--paper); border:1px solid var(--ink); padding:6px; font-family:var(--mono); font-size:11px; box-shadow:3px 3px 0 var(--ink); }
+  .concepts a { text-decoration:none; padding:6px 10px; color:var(--muted); } .concepts a.on { background:var(--ink); color:var(--paper); }
+  @media (max-width:900px){ .front { grid-template-columns:1fr; } .cols { columns:1; } .sizes { grid-template-columns:1fr 1fr; } .size.large { grid-row:auto; grid-column:span 2; } .snek { grid-template-columns:1fr; } nav { gap:16px; flex-wrap:wrap; } .fan-section { height:240vh; } }
+  @media (prefers-reduced-motion: reduce){ html { scroll-behavior:auto; } .fan .card { transition:none; } }
+</style>
+</head>
+<body>
+<div class="container masthead">
+  <div class="top"><span>Vol. I · No. 1</span><span>macOS Edition · Thursday, 4 September 2026</span><span>Price: free · also a snake</span></div>
+  <h1>The Gitlines <span>Broadsheet</span></h1>
+  <div class="sub">A native macOS widget reports your real GitHub activity. Every edition prints the same figures.</div>
+</div>
+<div class="container"><nav><a href="#film">The Film</a><a href="#fan">Editions</a><a href="#numbers">Ledger</a><a href="#sizes">Formats</a><a href="#snek">Nature</a><a href="https://github.com/yjay18/Gitlines">GitHub ↗</a></nav></div>
+
+<header class="container front">
+  <div>
+    <div class="kicker">Front page · Today, across every branch</div>
+    <div class="num"><span id="nA">+0</span><span class="d" id="nD">−0</span></div>
+    <h2>The same figures,<br>in every edition.</h2>
+    <p class="dek">Gitlines puts your actual commit activity on the Mac desktop: exact additions, deletions, net lines, peak hours and repository rankings, gathered across every branch and deduplicated by SHA. It ships in six complete visual themes, each with four hand-built widget layouts, and every one of them prints the identical figures.</p>
+    <a class="cta solid" href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download>Download for macOS</a><a class="cta" href="#film">See the film</a>
+  </div>
+  <div id="film" class="plate"><video controls playsinline preload="metadata" poster="../assets/brag-poster.jpg"><source src="../assets/brag.mp4" type="video/mp4"></video><div class="cap"><span>Fig. 1 — The launch film, 21 s</span><span>1920 × 1080</span></div></div>
+</header>
+
+<div id="fan" class="fan-section"><div class="fan-sticky">
+  <div class="fan-head"><h2>One edition of the truth.</h2><p>Scroll to spread the deck.</p></div>
+  <div class="fan" id="fanEl"></div>
+  <div class="fan-note">+1,247 · −389 · 23 commits · pinned in every edition</div>
+</div></div>
+
+<section id="numbers" class="container">
+  <div class="sec-title"><h2>The Ledger</h2><hr class="rule thick"></div>
+  <div class="cols">
+    <article><div class="k">Every branch</div><h3>Work beyond main is counted</h3><p>Gitlines discovers recent activity on any branch and deduplicates commits that appear on more than one, by repository and SHA. What you shipped on a feature branch counts on the day you shipped it.</p></article>
+    <article><div class="k">Periods</div><h3>Daily, weekly, monthly, per widget</h3><p>Choose a period for each widget and cycle it from the widget itself. Show the calendar day, week or month, or a rolling 24 hours, 7 days or 30 days. Both are cached on every refresh so the switch is immediate.</p></article>
+    <article><div class="k">Exact figures</div><h3>Additions, deletions, net change</h3><p>Totals come from GitHub's individual commit statistics. Alongside them: active intervals, peak activity, averages and a ranking of repositories by change.</p></article>
+    <article><div class="k">Owners</div><h3>Personal and organization repositories</h3><p>Connect a personal account, then add organizations independently with fine-grained, read-only tokens. GitHub limits each token to one resource owner, so every organization gets its own. All tokens live only in Keychain.</p></article>
+    <article><div class="k">The boundary</div><h3>The widget never holds a token</h3><p>The host app is the only GitHub client. It writes display-ready snapshots atomically to the shared App Group container, and the widget extension only reads that cache.</p></article>
+    <article><div class="k">Weather</div><h3>Stale, never blank</h3><p>If a refresh fails the widget keeps the last successful snapshot and marks it stale. Refreshing from the widget is deliberately light; the app performs the full branch discovery.</p></article>
+  </div>
+</section>
+
+<section id="sizes" class="container">
+  <div class="sec-title"><h2>Formats</h2><hr class="rule thick"></div>
+  <div class="sizes">
+    <div class="size"><div class="lbl">Small</div><div class="n">+1,247</div><div class="d">−389</div></div>
+    <div class="size"><div class="lbl">Medium</div><div class="n">+1,247</div><div class="d">−389</div><div class="engr"><i style="height:30%"></i><i style="height:60%"></i><i style="height:100%"></i><i style="height:45%"></i><i style="height:70%"></i></div></div>
+    <div class="size large"><div class="lbl">Large</div><div class="n">+1,247</div><div class="d">−389</div><div class="engr"><i style="height:20%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:80%"></i><i style="height:100%"></i><i style="height:60%"></i><i style="height:30%"></i></div><p style="font-size:14px;color:var(--muted);margin:14px 0 0;line-height:1.6">gitlines · thesis-icu · widtget-app<br>23 commits · peak 14:00 · avg 1.9/h</p></div>
+    <div class="size xl"><div class="lbl">Extra large</div><div style="display:flex;gap:30px;align-items:flex-end"><div><div class="n">+1,247</div><div class="d">−389</div></div><div class="engr" style="flex:1"><i style="height:20%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:80%"></i><i style="height:100%"></i><i style="height:60%"></i><i style="height:30%"></i><i style="height:50%"></i><i style="height:90%"></i><i style="height:40%"></i></div></div></div>
+  </div>
+</section>
+
+<section id="snek" class="container"><div class="snek">
+  <div><div class="kicker">Nature notes</div><h2 style="font-size:clamp(28px,3.4vw,44px);margin:0 0 10px;letter-spacing:-.02em">A snake is observed.</h2><p style="margin:0;color:#3a362a">The commit snek grows one segment per commit. Its states are recorded in the source as <em>smol snek</em>, <em>growing snek</em> and <em>snek happy</em>. The editors did not add this for the newspaper. It is in the code.</p></div>
+  <div><div class="snek-grid" id="snekGrid"></div><div class="snek-state"><span id="snekCount">0 commits</span><span id="snekState">smol snek</span></div></div>
+</div></section>
+
+<section id="get" class="get container">
+  <img src="../assets/icon.png" alt="Gitlines app icon">
+  <h2>Gitlines 1.0</h2>
+  <p style="color:var(--muted);font-style:italic;margin:0 0 26px">macOS 14 or newer · 3.8 MB disk image</p>
+  <a class="cta solid" href="https://github.com/yjay18/Gitlines/releases/download/v1.0/gitlines.dmg" download>Download gitlines.dmg</a><a class="cta" href="https://github.com/yjay18/Gitlines">View on GitHub</a>
+</section>
+<footer><div class="container"><span>© 2026 Gitlines · Not an official GitHub product</span><span>macOS 14+ · <a href="https://github.com/yjay18/Gitlines/releases/tag/v1.0" style="color:inherit">v1.0</a></span></div></footer>
+<div class="concepts"><a href="../index.html">A · Orbit</a><a href="phosphor.html">B · Phosphor</a><a class="on" href="broadsheet.html">C · Broadsheet</a></div>
+
+<script src="../assets/widget.js"></script>
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function fmt(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  var A = document.getElementById('nA'), D = document.getElementById('nD'), t0 = performance.now();
+  (function tick(){ var p = Math.min(1, (performance.now()-t0)/(reduce?1:1500)), e = 1-Math.pow(1-p,3); A.textContent = '+' + fmt(Math.round(1247*e)); D.textContent = '−' + fmt(Math.round(389*e)); if (p<1) requestAnimationFrame(tick); })();
+
+  /* ---- the fan: six widgets stacked, spread across 3D as you scroll the tall section ---- */
+  var fan = document.getElementById('fanEl'), sec = document.getElementById('fan'), cards = [];
+  var order = ['broadsheet','default','glasshouse','phosphor','arcade','blockwork'];
+  order.forEach(function(k){ var c = document.createElement('div'); c.className = 'card'; var w = document.createElement('div'); c.appendChild(w); Gitlines.mount(w, k);
+     fan.appendChild(c); cards.push(c); });
+  function layout(){
+    var r = sec.getBoundingClientRect(), p = Math.min(1, Math.max(0, -r.top / (r.height - innerHeight)));
+    /* phase 1 (0-.5): the deck spreads into a fan. phase 2 (.5-1): the fan rotates so each edition takes the front in turn. */
+    var spread = Math.min(1, p*2), turn = Math.max(0, (p-.5)*2) * (cards.length-1);
+    var front = Math.round(turn);
+    cards.forEach(function(c, i){
+      var k = i - turn, ang = k * 18 * spread, x = k * 36 * spread, z = -Math.abs(k) * 200 * spread, y = Math.abs(k) * 10 * spread;
+      c.style.transform = 'translate3d(' + x + '%, ' + y + 'px, ' + z + 'px) rotateY(' + (-ang) + 'deg)';
+      c.style.zIndex = 100 - Math.round(Math.abs(k)*10);
+      c.classList.toggle('front', spread > .95 && i === front);
+    });
+  }
+  addEventListener('scroll', layout, { passive:true }); addEventListener('resize', layout); layout();
+
+  /* ---- snek ---- */
+  var grid = document.getElementById('snekGrid'), cells = []; for (var i=0;i<36;i++){ var c = document.createElement('i'); grid.appendChild(c); cells.push(c); }
+  function pos(n){ var r = Math.floor(n/12), c = n%12; if (r%2) c = 11-c; return r*12+c; }
+  var n = 0; function grow(){ n = (n%24)+1; cells.forEach(function(c){ c.className=''; }); for (var k=0;k<n;k++) cells[pos(k)].className = k===n-1?'on head':'on';
+    document.getElementById('snekCount').textContent = n + (n===1?' commit':' commits'); document.getElementById('snekState').textContent = n<5?'smol snek':n<15?'growing snek':'snek happy'; }
+  var on = false; new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting && !on){ on = true; grow(); setInterval(grow, reduce?4000:420); } }); }).observe(grid);
+})();
+</script>
+</body>
+</html>

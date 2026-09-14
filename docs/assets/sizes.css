@@ -1,0 +1,86 @@
+/* Gitlines — the four real widget layouts, rebuilt from widtget/Views/DefaultWidgetView.swift.
+   Each family is drawn at its true macOS point size; 1em inside a widget == 1 point,
+   so every number below is the number in the Swift source. */
+.wk {
+  container-type: size; position: relative; width: 100%; overflow: hidden;
+  --bg:#090C10; --surface:#13181E; --raised:#171D24; --border:rgba(255,255,255,.075);
+  --text:#EDF2F7; --muted:#8591A1; --green:#38CC75; --coral:#F26166; --neutral:#212933;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(0,0,0,.5);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Display", system-ui, sans-serif;
+  color: var(--text); font-synthesis: none;
+}
+.wk-small { aspect-ratio: 155/155; } .wk-medium { aspect-ratio: 329/155; }
+.wk-large { aspect-ratio: 329/345; } .wk-xl { aspect-ratio: 681/345; }
+/* the font size must live on a DESCENDANT of the container: an element cannot query itself.
+   1em == 1 macOS point, so every size in the layout is the number from the Swift source. */
+.wk-in { position:absolute; inset:0; display:flex; flex-direction:column; }
+/* --pt is one macOS point. Use it for any length on an element that also sets font-size,
+   because em there would resolve against that font-size instead of the point grid. */
+.wk-small .wk-in, .wk-medium .wk-in { --pt: calc(100cqh / 155); font-size: var(--pt); }
+.wk-large .wk-in, .wk-xl .wk-in { --pt: calc(100cqh / 345); font-size: var(--pt); }
+.wk .surf { background: var(--raised); border: 1px solid var(--border); border-radius: 10em; }
+.wk .row { display:flex; } .wk .col { display:flex; flex-direction:column; } .wk .grow { flex:1 1 auto; min-width:0; min-height:0; }
+.wk .rule-v { width:1px; background: var(--border); align-self:stretch; } .wk .rule-h { height:1px; background: var(--border); }
+
+/* header */
+.wk .hd { display:flex; align-items:center; }
+.wk .hd .mark { color: var(--green); display:block; } .wk .hd .mark svg { display:block; }
+.wk .hd .user { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wk .hd .sp { flex:1 1 auto; } .wk .hd .rf { color: var(--muted); font-weight:700; }
+.wk .hd .pill { font-weight:700; letter-spacing:.08em; border:1px solid var(--border); border-radius:999px; white-space:nowrap; }
+
+/* numerics */
+.wk .big { font-weight:800; font-variant-numeric: tabular-nums; letter-spacing:-.02em; line-height:1.06; white-space:nowrap; }
+.wk .add { color: var(--green); } .wk .del { color: var(--coral); }
+
+/* secondary metrics bar */
+.wk .sec { display:flex; align-items:center; border-radius:8em; background:var(--raised); border:1px solid var(--border); }
+.wk .sec .m { display:flex; align-items:baseline; gap:3em; white-space:nowrap; }
+.wk .sec .v { font-weight:700; font-variant-numeric: tabular-nums; } .wk .sec .l { color: var(--muted); font-weight:500; }
+.wk .sec .div { width:1px; background: var(--border); }
+
+/* activity strip: green additions stacked over coral deletions, per ActivityStrip */
+.wk .strip { display:flex; align-items:flex-end; gap:2em; }
+.wk .strip .bar { flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-end; gap:1em; min-width:0; }
+.wk .strip .bar .a { background: var(--green); } .wk .strip .bar .d { background: var(--coral); }
+.wk .strip .bar .z { background: var(--neutral); height:3em; }
+.wk .axis { display:flex; color: var(--muted); font-weight:600; }
+.wk .axis span { flex:1 1 0; text-align:center; overflow:hidden; }
+
+/* insight trio */
+.wk .ins { display:flex; align-items:flex-start; }
+.wk .ins .i { flex:1 1 0; display:flex; flex-direction:column; min-width:0; }
+.wk .ins .t { color: var(--muted); font-weight:700; } .wk .ins .v { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.wk .ins .d { color: var(--muted); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wk .ins .sep { width:1px; background: var(--border); }
+
+/* repositories */
+.wk .lab { color: var(--muted); font-weight:700; }
+.wk .repo { display:flex; flex-direction:column; }
+.wk .repo .top { display:flex; align-items:baseline; gap:6em; }
+.wk .repo .top .nm { flex:0 1 auto; } .wk .repo .top .n { flex:0 0 auto; }
+.wk .repo .top .c { flex:0 1 auto; overflow:hidden; }
+.wk .repo .nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wk .repo .c { color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.wk .repo .sp { flex:1 1 auto; } .wk .repo .n { font-variant-numeric:tabular-nums; font-weight:600; }
+.wk .repo .track { display:flex; background: var(--neutral); border-radius:2em; overflow:hidden; }
+.wk .repo .track .a { background: var(--green); } .wk .repo .track .d { background: var(--coral); }
+
+/* grid + snek */
+.wk .grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4em; }
+.wk .grid i { border-radius:2em; background: var(--neutral); position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; }
+.wk .grid i b { display:block; } .wk .grid i b.a { background: var(--green); } .wk .grid i b.d { background: var(--coral); }
+.wk .snek { display:grid; gap:3em; align-content:center; }
+.wk .snek i { aspect-ratio:1; border-radius:2em; background: var(--neutral); }
+.wk .snek i.on { background: var(--green); } .wk .snek i.head { background:#7FE3A4; }
+.wk .st { color: var(--muted); font-weight:500; white-space:nowrap; }
+
+/* the row of four on the page */
+/* each row holds families of equal height, sized in their true proportion to one another */
+.size-rack { display:flex; flex-direction:column; gap:22px; }
+.size-row { display:grid; gap:22px; align-items:start; }
+.size-row.r1 { grid-template-columns:155fr 329fr; } .size-row.r2 { grid-template-columns:329fr 681fr; }
+.size-rack .cell { display:flex; flex-direction:column; gap:9px; min-width:0; }
+.size-rack .cap { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#8592A3; display:flex; justify-content:space-between; }
+@media (max-width: 900px) { .size-row.r1, .size-row.r2 { grid-template-columns:1fr; } }

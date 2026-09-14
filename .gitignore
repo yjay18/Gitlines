@@ -4,3 +4,12 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 .swiftpm/
+
+# Agent worktrees (large local checkouts)
+.claude/worktrees/
+
+# Film render outputs — reproducible with `npx hyperframes render` from
+# brag-output/composition; the published copies live in docs/assets/.
+brag-output/brag.mp4
+brag-output/brag.jpg
+brag-output/composition/renders/

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gitlines — hero: the pull-back</title>
+<link rel="icon" href="../assets/favicon.png"><link rel="stylesheet" href="../assets/widget.css">
+<style>
+  :root { --ink:#090C10; --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --font:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Inter, Arial, sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--ink); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .hint { position:fixed; inset:0 0 auto 0; z-index:3; display:flex; justify-content:space-between; padding:18px 24px; font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .scroll { height:500vh; } .stick { position:sticky; top:0; height:100vh; overflow:hidden; perspective:1400px; perspective-origin:50% 40%; }
+  /* the desktop: wallpaper + menu bar + dock, laid out at 1:1 and then the whole world is scaled/tilted */
+  .world { position:absolute; left:50%; top:50%; width:1440px; height:900px; margin:-450px 0 0 -720px; transform-style:preserve-3d; will-change:transform; }
+  .desk { position:absolute; inset:0; border-radius:18px; overflow:hidden; background:radial-gradient(1200px 700px at 30% 20%, #1c2a3a 0%, #0c1219 45%, #05070a 100%); box-shadow:0 60px 160px rgba(0,0,0,.7); }
+  .desk::before { content:""; position:absolute; left:0; right:0; top:0; height:28px; background:rgba(255,255,255,.06); backdrop-filter:blur(10px); }
+  .desk .dock { position:absolute; left:50%; bottom:14px; transform:translateX(-50%); display:flex; gap:10px; padding:8px 12px; border-radius:18px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); }
+  .desk .dock i { width:44px; height:44px; border-radius:11px; background:linear-gradient(135deg, rgba(255,255,255,.28), rgba(255,255,255,.06)); }
+  .desk .dock i.g { background:url(../assets/icon.png) center/cover; }
+  .wg { position:absolute; transform-style:preserve-3d; }
+  .wg.m { left:120px; top:180px; width:560px; }
+  .wg.s { left:720px; top:180px; width:262px; opacity:0; } .wg.l { left:1020px; top:180px; width:300px; opacity:0; } .wg.xl { left:120px; top:520px; width:860px; opacity:0; }
+  .wg.s .gl-widget, .wg.l .gl-widget { aspect-ratio:1; } .wg.xl .gl-widget { aspect-ratio:44/17; }
+  .wg .lbl { position:absolute; left:0; top:-26px; font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+  /* the small and large mocks: minimal number cards in the same palette */
+  .card { position:absolute; inset:0; border-radius:26px; background:#12161B; border:1px solid rgba(255,255,255,.09); padding:26px; box-shadow:0 34px 90px rgba(0,0,0,.55); color:var(--text); }
+  .card .a { font-size:52px; font-weight:700; color:var(--green); letter-spacing:-.03em; line-height:1; } .card .d { font-size:34px; font-weight:700; color:#F26166; letter-spacing:-.03em; }
+  .card .u { font-size:15px; font-weight:600; margin-bottom:22px; display:flex; align-items:center; gap:8px; } .card .u::before { content:""; width:9px; height:9px; border-radius:50%; background:var(--green); }
+  .card .row { display:flex; gap:5px; align-items:flex-end; height:40px; margin-top:16px; } .card .row i { flex:1; background:var(--green); border-radius:3px; }
+  .card .rep { font-size:13px; color:var(--muted); line-height:1.7; margin-top:14px; }
+  .cap { position:absolute; left:6vw; bottom:10vh; max-width:560px; opacity:0; transform:translateY(16px); transition:opacity .35s, transform .45s; pointer-events:none; }
+  .cap.on { opacity:1; transform:none; } .cap h1 { font-size:clamp(30px,4.4vw,60px); letter-spacing:-.03em; line-height:1.02; margin:0 0 10px; } .cap p { margin:0; color:var(--muted); font-size:17px; }
+  .cap .k { font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--green); margin-bottom:10px; }
+</style>
+</head>
+<body>
+<div class="hint"><span>Gitlines · hero: the pull-back</span><span>Scroll ↓</span></div>
+<div class="scroll" id="scroll"><div class="stick">
+  <div class="world" id="world">
+    <div class="desk"><div class="dock"><i class="g"></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="wg m"><div class="lbl">Medium</div><div id="w"></div></div>
+    <div class="wg s"><div class="lbl">Small</div><div class="gl-widget"><div class="card"><div class="u">@yjay18</div><div class="a">+1,247</div><div class="d">−389</div></div></div></div>
+    <div class="wg l"><div class="lbl">Large</div><div class="gl-widget"><div class="card"><div class="u">@yjay18</div><div class="a">+1,247</div><div class="d">−389</div><div class="row"><i style="height:30%"></i><i style="height:60%"></i><i style="height:100%"></i><i style="height:45%"></i><i style="height:70%"></i><i style="height:35%"></i></div><div class="rep">gitlines +842 −201<br>thesis-icu +301 −144</div></div></div></div>
+    <div class="wg xl"><div class="lbl">Extra large</div><div class="gl-widget"><div class="card" style="display:flex;gap:40px;align-items:center"><div><div class="u">@yjay18</div><div class="a">+1,247</div><div class="d">−389</div></div><div class="row" style="flex:1;height:80px;margin:0"><i style="height:20%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:80%"></i><i style="height:100%"></i><i style="height:60%"></i><i style="height:30%"></i><i style="height:50%"></i><i style="height:90%"></i><i style="height:40%"></i><i style="height:65%"></i><i style="height:25%"></i></div><div class="rep" style="margin:0">gitlines +842 −201<br>thesis-icu +301 −144<br>widtget-app +104 −44</div></div></div></div>
+  </div>
+  <div class="cap" data-from="0" data-to=".22"><div class="k">Today · across every branch</div><h1>Your number.</h1><p>Exact additions and deletions from GitHub's per-commit stats.</p></div>
+  <div class="cap" data-from=".22" data-to=".55"><div class="k">It's a widget</div><h1>On your desktop.</h1><p>A native macOS WidgetKit widget. Always on, always current.</p></div>
+  <div class="cap" data-from=".55" data-to="1.01"><div class="k">Four sizes</div><h1>Four hand-built layouts.</h1><p>Small, medium, large and extra-large. Not one design stretched.</p></div>
+</div></div>
+<script src="../assets/widget.js"></script>
+<script>
+(function(){
+  Gitlines.mount(document.getElementById('w'), 'default');
+  var world = document.getElementById('world'), scroll = document.getElementById('scroll'), caps = [].slice.call(document.querySelectorAll('.cap'));
+  var others = [].slice.call(document.querySelectorAll('.wg.s, .wg.l, .wg.xl'));
+  /* anchor the zoom on the +1,247 inside the medium widget: origin at its centre, in world coordinates */
+  var num = document.querySelector('#w .m-add'), ox, oy;
+  function anchor(){ world.style.transform = 'none'; var r = num.getBoundingClientRect(), w = world.getBoundingClientRect(); ox = r.left - w.left + r.width/2; oy = r.top - w.top + r.height/2; }
+  var ease = function(t){ return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; };
+  function layout(){
+    var r = scroll.getBoundingClientRect(), p = Math.min(1, Math.max(0, -r.top/(r.height-innerHeight)));
+    var zoom = 1 - ease(Math.min(1, p/.55));             /* 1 = tight on the number, 0 = desktop at 1:1 */
+    var tilt = ease(Math.max(0, (p-.55)/.45));            /* then the desktop lies back and the other sizes appear */
+    var fit = Math.min(innerWidth/1440, innerHeight/900) * .92;
+    var s = (fit + (5.2 - fit) * zoom) * (1 - tilt*.18);
+    /* origin slides from the number (zoomed) to the desktop centre (pulled back); translate keeps that origin on screen centre */
+    var o = [720 + (ox-720)*zoom, 450 + (oy-450)*zoom];
+    world.style.transformOrigin = o[0] + 'px ' + o[1] + 'px';
+    world.style.transform = 'translate(' + (720-o[0]) + 'px,' + (450-o[1] - tilt*40) + 'px) rotateX(' + (tilt*38) + 'deg) scale(' + s + ')';
+    others.forEach(function(el, i){ el.style.opacity = Math.max(0, Math.min(1, (tilt - i*.15)/.4)); el.style.transform = 'translateZ(' + (tilt*90) + 'px)'; });
+    caps.forEach(function(c){ c.classList.toggle('on', p >= +c.dataset.from && p < +c.dataset.to); });
+  }
+  anchor(); addEventListener('resize', function(){ anchor(); layout(); }); addEventListener('scroll', layout, { passive:true }); layout();
+})();
+</script>
+</body>
+</html>

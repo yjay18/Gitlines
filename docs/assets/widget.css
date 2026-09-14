@@ -1,0 +1,55 @@
+/* Gitlines widget mock — the same snapshot in six faces.
+   Sizes are in em against a container-query base so it scales with its box. */
+.gl-widget { container-type: inline-size; width: 100%; aspect-ratio: 44 / 21; position: relative; }
+.gl-widget .w { position: absolute; inset: 0; font-size: 1cqw; color: var(--text); font-family: var(--font);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 3.4em 9em rgba(0,0,0,.55), 0 .2em 0 rgba(255,255,255,.03) inset;
+  padding: 4.3em 5em; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+.gl-widget .w-head { height: 3.9em; display: flex; align-items: center; justify-content: space-between; }
+.gl-widget .w-user { display: flex; align-items: center; gap: 1.3em; font-size: 2.84em; font-weight: 600; }
+.gl-widget .w-dot { width: .6em; height: .6em; border-radius: 50%; background: var(--green); }
+.gl-widget .w-period { font-size: 2.27em; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  padding: .3em .7em; border: 1px solid var(--line); border-radius: 999px; }
+.gl-widget .w-body { display: flex; gap: 4.5em; margin-top: 3em; }
+.gl-widget .w-metrics { flex: 0 0 38.6em; }
+.gl-widget .m-add { font-size: 10.9em; line-height: 1; font-weight: 700; color: var(--green); font-variant-numeric: tabular-nums; }
+.gl-widget .m-del { font-size: 7.7em; line-height: 1; font-weight: 700; color: var(--coral); margin-top: .08em; font-variant-numeric: tabular-nums; }
+.gl-widget .m-commits { font-size: 2.95em; font-weight: 600; color: var(--muted); margin-top: .5em; }
+.gl-widget .w-right { flex: 1 1 auto; min-width: 0; }
+.gl-widget .w-barlabel { font-size: 1.8em; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: .8em; }
+.gl-widget .bars { display: flex; align-items: flex-end; gap: .8em; height: 10.5em; }
+.gl-widget .bar { flex: 1 1 auto; background: var(--green); border-radius: var(--barradius); min-height: .3em; }
+.gl-widget .bar.neg { background: var(--coral); }
+.gl-widget .bars-glyph { font-size: 3.4em; line-height: 3.1em; height: 3.1em; letter-spacing: .1em; color: var(--green); white-space: nowrap; }
+.gl-widget .repos { margin-top: 2.5em; display: flex; flex-direction: column; gap: 1.1em; }
+.gl-widget .repo { display: flex; justify-content: space-between; font-size: 2.4em; padding-bottom: .4em; border-bottom: 1px solid var(--line); }
+.gl-widget .repo-name { font-weight: 600; }
+.gl-widget .repo-nums { display: flex; gap: .6em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gl-widget .repo-add { color: var(--green); } .gl-widget .repo-del { color: var(--coral); }
+.gl-widget .w-foot { margin-top: auto; font-size: 2em; color: var(--muted); }
+
+/* ---- exact palettes from ThemePalette.swift ---- */
+.t-default   { --ink:#090C10; --panel:#12161B; --line:rgba(255,255,255,.09); --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --coral:#F26166;
+  --font: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; --radius: 3.2em; --barradius: .45em; }
+.t-glasshouse{ --ink:#1C1D21; --panel:rgba(255,255,255,.055); --line:rgba(255,255,255,.14); --text:#F2F3F5; --muted:rgba(255,255,255,.5); --green:#7EE2A8; --coral:#F0868C;
+  --font: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; --radius: 3.4em; --barradius: 999px; }
+.t-glasshouse .w { backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+.t-glasshouse .m-add, .t-glasshouse .m-del { font-weight: 500; letter-spacing: -.04em; }
+.t-phosphor  { --ink:#06090A; --panel:#06090A; --line:rgba(74,240,138,.18); --text:#4AF08A; --muted:#2C8F58; --green:#4AF08A; --coral:#FFB340;
+  --font: ui-monospace, "SF Mono", Menlo, "Courier New", monospace; --radius: 1.1em; --barradius: 0; }
+.t-phosphor .w { box-shadow: 0 3.4em 9em rgba(0,0,0,.6), 0 0 9em rgba(74,240,138,.07) inset; }
+.t-phosphor .w-period { border-radius: .15em; }
+.t-phosphor .repo { border-bottom: 1px dashed rgba(74,240,138,.22); }
+.t-broadsheet{ --ink:#E9E4D5; --panel:#E9E4D5; --line:rgba(25,23,15,.22); --text:#19170F; --muted:#6D6555; --green:#19170F; --coral:#9E2F1B;
+  --font: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; --radius: .7em; --barradius: 0; }
+.t-broadsheet .repo { border-bottom: 1px dotted rgba(25,23,15,.42); }
+.t-broadsheet .w-period { border-radius: .1em; letter-spacing: .2em; }
+.t-broadsheet .w-barlabel { letter-spacing: .24em; }
+.t-arcade    { --ink:#0F380F; --panel:#0F380F; --line:#306230; --text:#8BAC0F; --muted:#306230; --green:#9BBC0F; --coral:#D94F1E;
+  --font: ui-monospace, "SF Mono", Menlo, "Courier New", monospace; --radius: .45em; --barradius: 0; }
+.t-arcade .w-period { border-radius: .1em; }
+.t-blockwork { --ink:#090C10; --panel:#0C1116; --line:rgba(255,255,255,.14); --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --coral:#F26166;
+  --font: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; --radius: 2em; --barradius: .2em; }
+.t-blockwork .w-metrics, .t-blockwork .w-right { border: 1px solid rgba(255,255,255,.14); border-radius: 1.1em; padding: 1.6em 2em; background: rgba(255,255,255,.028); }
+.t-blockwork .m-add { font-size: 9.3em; } .t-blockwork .m-del { font-size: 6.6em; }
+.t-blockwork .w-body { gap: 2.7em; margin-top: 2em; } .t-blockwork .bars { height: 8.8em; }

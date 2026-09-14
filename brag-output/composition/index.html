@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Gitlines — brag</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/audio-reactive.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px; height: 1080px; overflow: hidden; background: #05070A;
+      }
+      body {
+        font-family: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+      .clip { position: absolute; inset: 0; }
+
+      /* ---------- shared type ---------- */
+      .num { font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+      .kicker {
+        font-size: 22px; font-weight: 600; letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      /* =====================================================================
+         SCENE 1-3 STAGE  (one continuous clip: the numbers never leave the DOM)
+         ===================================================================== */
+      #stage { z-index: 1; background: #05070A; }
+      #stage-fill { position: absolute; inset: 0; background: #05070A; }
+
+      /* desktop backdrop — fades in on the pull-back */
+      #deskLayer { position: absolute; inset: 0; opacity: 0; }
+      #desk {
+        position: absolute; inset: 0;
+        background:
+          linear-gradient(158deg, #0E1620 0%, #0A101A 42%, #070B12 100%);
+      }
+      #glow {
+        position: absolute; left: 50%; top: 46%;
+        width: 1700px; height: 1150px; margin: -575px 0 0 -850px;
+        background: radial-gradient(ellipse at center,
+          rgba(56, 204, 117, 0.16) 0%,
+          rgba(38, 120, 150, 0.09) 38%,
+          rgba(0, 0, 0, 0) 68%);
+        opacity: 0.3;
+      }
+      #vignette {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse at 50% 46%,
+          rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%);
+      }
+
+      /* camera + audio-reactive pulse wrappers (separate elements on purpose) */
+      #cam {
+        position: absolute; inset: 0;
+        display: grid; place-items: center;
+      }
+      #pulse { display: block; }
+
+      /* ---------- the widget ---------- */
+      .widget-stack { position: relative; width: 880px; height: 420px; }
+      .widget {
+        position: absolute; inset: 0;
+        opacity: 0;
+        color: var(--text);
+        font-family: var(--font);
+      }
+      .w-surface {
+        position: absolute; inset: 0;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: 0 34px 90px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.03) inset;
+        opacity: 0;
+      }
+      .w-inner {
+        position: absolute; inset: 0;
+        padding: 38px 44px;
+        display: flex; flex-direction: column;
+      }
+      .w-head {
+        height: 34px; display: flex; align-items: center; justify-content: space-between;
+        opacity: 0;
+      }
+      .w-user { display: flex; align-items: center; gap: 12px; font-size: 25px; font-weight: 600; }
+      .w-dot { width: 15px; height: 15px; border-radius: 50%; background: var(--green); display: block; }
+      .w-period {
+        font-size: 20px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--muted); padding: 6px 14px; border: 1px solid var(--line);
+        border-radius: 999px;
+      }
+      .w-body { display: flex; gap: 40px; margin-top: 26px; }
+      .w-metrics { width: 340px; flex: 0 0 340px; }
+      .m-add {
+        font-size: 96px; line-height: 1; font-weight: 700; color: var(--green);
+      }
+      .m-del {
+        font-size: 68px; line-height: 1; font-weight: 700; color: var(--coral); margin-top: 6px;
+      }
+      .m-commits {
+        font-size: 26px; line-height: 1; font-weight: 600; color: var(--muted);
+        margin-top: 12px; opacity: 0;
+      }
+      .w-right { width: 412px; flex: 0 0 412px; opacity: 0; }
+      .w-barlabel {
+        font-size: 16px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+        color: var(--muted); margin-bottom: 12px;
+      }
+      .bars { display: flex; align-items: flex-end; gap: 7px; height: 92px; }
+      .bar {
+        display: block; flex: 1 1 auto; background: var(--green);
+        border-radius: var(--barradius); min-height: 3px;
+      }
+      .bar.neg { background: var(--coral); }
+      .bars-glyph {
+        font-size: 30px; line-height: 92px; height: 92px; letter-spacing: 3px;
+        color: var(--green); white-space: nowrap;
+      }
+      .repos { margin-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+      .repo {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: 21px; padding-bottom: 9px; border-bottom: 1px solid var(--line);
+      }
+      .repo-name { font-weight: 600; color: var(--text); }
+      .repo-nums { display: flex; gap: 14px; font-weight: 600; }
+      .repo-add { color: var(--green); }
+      .repo-del { color: var(--coral); }
+      .w-foot {
+        margin-top: auto; font-size: 18px; color: var(--muted); opacity: 0;
+      }
+
+      /* ---------- theme palettes (exact values from ThemePalette.swift) ---------- */
+      .t-default {
+        --ink:#090C10; --panel:#12161B; --line:rgba(255,255,255,0.09);
+        --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --coral:#F26166;
+        --font: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+        --radius: 28px; --barradius: 4px;
+      }
+      .t-glass {
+        --ink:#1C1D21; --panel:rgba(255,255,255,0.055); --line:rgba(255,255,255,0.14);
+        --text:#F2F3F5; --muted:rgba(255,255,255,0.5); --green:#7EE2A8; --coral:#F0868C;
+        --font: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+        --radius: 30px; --barradius: 999px;
+      }
+      .t-glass .w-surface { backdrop-filter: blur(24px); box-shadow: 0 34px 90px rgba(0,0,0,0.45); }
+      .t-glass .m-add, .t-glass .m-del { font-weight: 500; letter-spacing: -0.04em; }
+      .t-glass .repo { border-bottom: 1px solid rgba(255,255,255,0.10); }
+      .t-glass .w-period { border-color: rgba(255,255,255,0.16); }
+
+      .t-phosphor {
+        --ink:#06090A; --panel:#06090A; --line:rgba(74,240,138,0.18);
+        --text:#4AF08A; --muted:#2C8F58; --green:#4AF08A; --coral:#FFB340;
+        --font: ui-monospace, "SF Mono", Menlo, "Courier New", monospace;
+        --radius: 10px; --barradius: 0px;
+      }
+      .t-phosphor .m-add, .t-phosphor .m-del { font-weight: 700; letter-spacing: 0em; }
+      .t-phosphor .w-period { border-radius: 3px; }
+      .t-phosphor .w-surface {
+        box-shadow: 0 34px 90px rgba(0,0,0,0.6), 0 0 90px rgba(74,240,138,0.07) inset;
+      }
+      .t-phosphor .repo { border-bottom: 1px dashed rgba(74,240,138,0.22); }
+
+      .t-broadsheet {
+        --ink:#E9E4D5; --panel:#E9E4D5; --line:rgba(25,23,15,0.22);
+        --text:#19170F; --muted:#6D6555; --green:#19170F; --coral:#9E2F1B;
+        --font: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        --radius: 6px; --barradius: 0px;
+      }
+      .t-broadsheet .w-surface { box-shadow: 0 34px 80px rgba(0,0,0,0.5); }
+      .t-broadsheet .m-add, .t-broadsheet .m-del { font-weight: 700; letter-spacing: -0.02em; }
+      .t-broadsheet .repo { border-bottom: 1px dotted rgba(25,23,15,0.42); }
+      .t-broadsheet .w-period { border-radius: 2px; letter-spacing: 0.2em; }
+      .t-broadsheet .w-barlabel { letter-spacing: 0.24em; }
+
+      .t-arcade {
+        --ink:#0F380F; --panel:#0F380F; --line:#306230;
+        --text:#8BAC0F; --muted:#306230; --green:#9BBC0F; --coral:#D94F1E;
+        --font: ui-monospace, "SF Mono", Menlo, "Courier New", monospace;
+        --radius: 4px; --barradius: 0px;
+      }
+      .t-arcade .w-surface { box-shadow: 0 34px 80px rgba(0,0,0,0.55); }
+      .t-arcade .m-add, .t-arcade .m-del { font-weight: 700; letter-spacing: 0.01em; }
+      .t-arcade .w-period { border-radius: 2px; }
+      .t-arcade .repo { border-bottom: 1px solid #306230; }
+
+      .t-blockwork {
+        --ink:#090C10; --panel:#0C1116; --line:rgba(255,255,255,0.14);
+        --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --coral:#F26166;
+        --font: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+        --radius: 18px; --barradius: 2px;
+      }
+      /* Blockwork is the modular studio theme — panes read as separate blocks */
+      .t-blockwork .w-metrics,
+      .t-blockwork .w-right {
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 10px;
+        padding: 14px 18px;
+        background: rgba(255,255,255,0.028);
+      }
+      .t-blockwork .w-metrics { width: 340px; flex: 0 0 340px; }
+      .t-blockwork .w-right { width: 412px; flex: 0 0 412px; }
+      .t-blockwork .m-add { font-size: 82px; }
+      .t-blockwork .m-del { font-size: 58px; }
+      .t-blockwork .w-body { gap: 24px; margin-top: 18px; }
+      .t-blockwork .bars { height: 78px; }
+      .t-blockwork .repos { margin-top: 16px; }
+      .t-blockwork .w-head { padding-bottom: 2px; }
+
+      /* ---------- stage overlays (outside the camera) ---------- */
+      #s1cap {
+        position: absolute; left: 0; right: 0; bottom: 168px;
+        text-align: center; font-size: 30px; font-weight: 500; letter-spacing: 0.01em;
+        color: #8592A3; opacity: 0;
+      }
+      #lockupTitle {
+        position: absolute; left: 132px; top: 300px; opacity: 0;
+      }
+      #lockupTitle .lt-name {
+        font-size: 76px; font-weight: 700; letter-spacing: -0.035em; color: #EDF2F7;
+      }
+      #lockupTitle .lt-sub {
+        margin-top: 14px; font-size: 27px; font-weight: 500; color: #8592A3;
+        max-width: 420px; line-height: 1.35;
+      }
+      #sixLine {
+        position: absolute; left: 0; right: 0; top: 132px;
+        text-align: center; font-size: 34px; font-weight: 600; color: #EDF2F7;
+        letter-spacing: -0.01em; opacity: 0;
+      }
+      /* =====================================================================
+         SCENE 4 — THE SNAKE
+         ===================================================================== */
+      #snekscene { z-index: 2; opacity: 0; }
+      #snek-fill { position: absolute; inset: 0; background: #090C10; }
+      #snek-wrap {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 54px;
+      }
+      #snek-grid {
+        position: relative;
+        width: 1066px; height: 166px;
+      }
+      .cell {
+        position: absolute; width: 76px; height: 76px;
+        border-radius: 11px; background: rgba(255,255,255,0.04);
+      }
+      .seg {
+        position: absolute; width: 76px; height: 76px;
+        border-radius: 11px; background: #38CC75; opacity: 0;
+      }
+      #snek-meta {
+        display: flex; align-items: baseline; gap: 26px;
+      }
+      #snek-state {
+        position: relative; width: 340px; height: 52px;
+      }
+      #snek-state span {
+        position: absolute; left: 0; top: 0; width: 340px; text-align: right;
+        font-size: 44px; font-weight: 700; letter-spacing: -0.02em; color: #38CC75;
+        opacity: 0;
+      }
+      #snek-count {
+        font-size: 30px; font-weight: 600; color: #8592A3;
+        font-variant-numeric: tabular-nums;
+      }
+      #snek-cap {
+        position: absolute; left: 0; right: 0; top: 150px;
+        text-align: center; font-size: 34px; font-weight: 600; color: #EDF2F7; opacity: 0;
+      }
+
+      /* =====================================================================
+         SCENE 5 — LOCKUP
+         ===================================================================== */
+      #lockup { z-index: 3; opacity: 0; }
+      #lockup-fill { position: absolute; inset: 0; background: #090C10; }
+      #lockup-wrap {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+      }
+      #mark { width: 560px; height: 350px; display: block; }
+      #mark path, #mark line { }
+      #mark .node { opacity: 0; }
+      #mark .sign { opacity: 0; }
+      #wordmark {
+        margin-top: 18px;
+        font-size: 82px; font-weight: 700; letter-spacing: -0.04em; color: #EDF2F7;
+        opacity: 0;
+      }
+      #tagline {
+        margin-top: 26px; font-size: 33px; font-weight: 500; color: #A9B4C2;
+        letter-spacing: -0.005em; opacity: 0;
+      }
+      #joke {
+        margin-top: 20px; font-size: 25px; font-weight: 500; color: #5E6A79;
+        opacity: 0;
+      }
+      #footer {
+        position: absolute; left: 0; right: 0; bottom: 88px; text-align: center;
+        font-size: 21px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase;
+        color: #727A85; opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="21"
+      data-width="1920"
+      data-height="1080"
+      data-fps="30"
+    >
+      <!-- ============ SCENES 1-3: one continuous stage ============ -->
+      <section id="stage" class="clip" data-start="0" data-duration="14.2" data-track-index="1">
+        <div id="stage-fill"></div>
+        <div id="deskLayer">
+          <div id="desk"></div>
+          <div id="glow"></div>
+          <div id="vignette"></div>
+        </div>
+
+        <div id="cam" data-layout-allow-overflow="true">
+          <div id="pulse">
+            <div class="widget-stack" id="widgetStack" data-layout-allow-overlap="true"></div>
+          </div>
+        </div>
+
+        <div id="s1cap">Today. Across every branch.</div>
+
+        <div id="lockupTitle">
+          <div class="lt-name">Gitlines</div>
+          <div class="lt-sub">Your GitHub activity, on your desktop.</div>
+        </div>
+
+        <div id="sixLine">Changing the look never changes the numbers.</div>
+
+      </section>
+
+      <!-- ============ SCENE 4: the snake ============ -->
+      <section id="snekscene" class="clip" data-start="14.2" data-duration="3.7" data-track-index="2">
+        <div id="snek-fill"></div>
+        <div id="snek-cap">It also grows a snake.</div>
+        <div id="snek-wrap">
+          <div id="snek-grid"></div>
+          <div id="snek-meta">
+            <div id="snek-state" data-layout-allow-overlap="true">
+              <span id="snek-s0">smol snek</span>
+              <span id="snek-s1">growing snek</span>
+              <span id="snek-s2">snek happy</span>
+            </div>
+            <div id="snek-count" class="num">1 commit</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SCENE 5: lockup ============ -->
+      <section id="lockup" class="clip" data-start="17.9" data-duration="3.1" data-track-index="3">
+        <div id="lockup-fill"></div>
+        <div id="lockup-wrap">
+          <svg id="mark" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(-140, -262)">
+              <path class="draw" d="M 240 390 C 360 390, 420 512, 512 512" fill="none" stroke="#EDECE8" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="draw" d="M 240 634 C 360 634, 420 512, 512 512" fill="none" stroke="#EDECE8" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="draw" d="M 512 512 C 604 512, 650 390, 744 390" fill="none" stroke="#EDECE8" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="draw" d="M 512 512 C 604 512, 650 634, 744 634" fill="none" stroke="#EDECE8" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle class="node" cx="512" cy="512" r="64" fill="#18191E" stroke="#EDECE8" stroke-width="32"/>
+              <circle class="node" cx="512" cy="512" r="16" fill="#EDECE8"/>
+              <g class="sign" stroke="#7B9E87" stroke-width="32" stroke-linecap="round">
+                <line x1="808" y1="390" x2="880" y2="390"/>
+                <line x1="844" y1="354" x2="844" y2="426"/>
+              </g>
+              <g class="sign" stroke="#C86C5A" stroke-width="32" stroke-linecap="round">
+                <line x1="808" y1="634" x2="880" y2="634"/>
+              </g>
+            </g>
+          </svg>
+          <div id="wordmark">Gitlines</div>
+          <div id="tagline">Your GitHub day, on your desktop.</div>
+          <div id="joke">also: a snake</div>
+        </div>
+        <div id="footer">macOS 14+ · github.com/yjay18/Gitlines</div>
+      </section>
+
+      <!-- ============ AUDIO ============ -->
+      <audio id="bgm" src="assets/music/happy-beats-business-moves-vol-11-by-ende-dot-app.mp3"
+             data-start="0" data-duration="21" data-track-index="9" data-volume="1"></audio>
+
+      <audio id="sfx-del" src="assets/sfx/interface/bong_001.ogg"
+             data-start="1.6" data-duration="0.12" data-track-index="10" data-volume="0.5"></audio>
+      <audio id="sfx-land" src="assets/sfx/impact/impactSoft_medium_001.ogg"
+             data-start="3.7" data-duration="0.18" data-track-index="10" data-volume="0.6"></audio>
+      <audio id="sfx-sw1" src="assets/sfx/ui/click2.ogg"
+             data-start="8.96" data-duration="0.06" data-track-index="10" data-volume="0.34"></audio>
+      <audio id="sfx-sw2" src="assets/sfx/ui/click2.ogg"
+             data-start="10.01" data-duration="0.06" data-track-index="10" data-volume="0.34"></audio>
+      <audio id="sfx-sw3" src="assets/sfx/ui/click2.ogg"
+             data-start="11.06" data-duration="0.06" data-track-index="10" data-volume="0.34"></audio>
+      <audio id="sfx-sw4" src="assets/sfx/ui/click2.ogg"
+             data-start="12.12" data-duration="0.06" data-track-index="10" data-volume="0.34"></audio>
+      <audio id="sfx-sw5" src="assets/sfx/ui/click2.ogg"
+             data-start="13.18" data-duration="0.06" data-track-index="10" data-volume="0.34"></audio>
+      <audio id="sfx-logo" src="assets/sfx/impact/impactSoft_medium_004.ogg"
+             data-start="17.91" data-duration="0.15" data-track-index="10" data-volume="0.55"></audio>
+    </div>
+
+    <script>
+      /* =====================================================================
+         Product data — the real arithmetic from the storyboard.
+         Repo additions sum to 1247; deletions sum to 389.
+         ===================================================================== */
+      var TOTAL_ADD = 1247, TOTAL_DEL = 389, TOTAL_COMMITS = 23;
+      var BAR_H = [18, 34, 26, 58, 92, 71, 44, 22, 30, 66, 88, 40];
+      var BAR_GLYPH = "▂▃▃▅█▆▄▂▃▆█▄";
+      var REPOS = [
+        { name: "gitlines",    add: 842, del: 201 },
+        { name: "thesis-icu",  add: 301, del: 144 },
+        { name: "widtget-app", add: 104, del:  44 }
+      ];
+
+      function group(n) {
+        return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      }
+
+      /* Six theme copies of the same widget, same snapshot, different faces. */
+      var THEMES = [
+        { key: "default",    cls: "t-default",    bars: "rect",  period: "Daily",
+          commits: "23 commits",          barLabel: "Activity",   foot: "Updated just now" },
+        { key: "glasshouse", cls: "t-glass",      bars: "rect",  period: "Daily",
+          commits: "23 commits",          barLabel: "Activity",   foot: "Updated just now" },
+        { key: "phosphor",   cls: "t-phosphor",   bars: "glyph", period: "daily",
+          commits: "23 commits",          barLabel: "activity",   foot: "$ git log --since=1.day" },
+        { key: "broadsheet", cls: "t-broadsheet", bars: "rect",  period: "Daily",
+          commits: "23 commits",          barLabel: "Day Book",   foot: "The Day's Ledger" },
+        { key: "arcade",     cls: "t-arcade",     bars: "rect",  period: "DAILY",
+          commits: "SCORE 23",            barLabel: "HIGH SCORE", foot: "PRESS ↻ TO REFRESH" },
+        { key: "blockwork",  cls: "t-blockwork",  bars: "rect",  period: "Daily",
+          commits: "23 commits",          barLabel: "Activity",   foot: "Updated just now" }
+      ];
+
+      function barsMarkup(theme) {
+        if (theme.bars === "glyph") {
+          return '<div class="bars-glyph">' + BAR_GLYPH + "</div>";
+        }
+        var out = '<div class="bars">';
+        for (var i = 0; i < BAR_H.length; i++) {
+          var neg = (i === 3 || i === 7 || i === 9) ? " neg" : "";
+          out += '<span class="bar' + neg + '" style="height:' + BAR_H[i] + '%"></span>';
+        }
+        return out + "</div>";
+      }
+
+      function reposMarkup(theme) {
+        var out = '<div class="repos">';
+        for (var i = 0; i < REPOS.length; i++) {
+          var r = REPOS[i];
+          var name = theme.key === "phosphor" ? r.name + "/" : r.name;
+          out +=
+            '<div class="repo">' +
+              '<span class="repo-name">' + name + "</span>" +
+              '<span class="repo-nums num">' +
+                '<span class="repo-add">+' + group(r.add) + "</span>" +
+                '<span class="repo-del">−' + group(r.del) + "</span>" +
+              "</span>" +
+            "</div>";
+        }
+        return out + "</div>";
+      }
+
+      function widgetMarkup(theme, isPrimary) {
+        var addId = isPrimary ? ' id="mAdd"' : "";
+        return (
+          '<div class="w-surface chrome"></div>' +
+          '<div class="w-inner">' +
+            '<div class="w-head chrome">' +
+              '<span class="w-user"><span class="w-dot"></span>@yjay18</span>' +
+              '<span class="w-period">' + theme.period + "</span>" +
+            "</div>" +
+            '<div class="w-body">' +
+              '<div class="w-metrics">' +
+                '<div class="m-add num"' + addId + ">+" + group(TOTAL_ADD) + "</div>" +
+                '<div class="m-del num">−' + group(TOTAL_DEL) + "</div>" +
+                '<div class="m-commits chrome">' + theme.commits + "</div>" +
+              "</div>" +
+              '<div class="w-right chrome">' +
+                '<div class="w-barlabel">' + theme.barLabel + "</div>" +
+                barsMarkup(theme) +
+                reposMarkup(theme) +
+              "</div>" +
+            "</div>" +
+            '<div class="w-foot chrome">' + theme.foot + "</div>" +
+          "</div>"
+        );
+      }
+
+      var stack = document.getElementById("widgetStack");
+      for (var t = 0; t < THEMES.length; t++) {
+        var el = document.createElement("div");
+        el.className = "widget " + THEMES[t].cls;
+        el.setAttribute("data-layout-allow-overlap", "true");
+        el.id = "w-" + THEMES[t].key;
+        el.innerHTML = widgetMarkup(THEMES[t], t === 0);
+        stack.appendChild(el);
+      }
+
+      /* The six theme copies are stacked on purpose (they crossfade), and both
+         label stacks swap in place — every overlap below is intentional layering. */
+      var layered = document.querySelectorAll(".widget *, #snek-state span");
+      for (var q = 0; q < layered.length; q++) {
+        layered[q].setAttribute("data-layout-allow-overlap", "true");
+      }
+
+      /* ---------- snake grid: 23 segments, one per commit ---------- */
+      var SNEK_COLS = 12, SNEK_ROWS = 2, SNEK_CELL = 76, SNEK_GAP = 14;
+      var grid = document.getElementById("snek-grid");
+      function cellPos(index) {
+        var row = Math.floor(index / SNEK_COLS);
+        var col = index % SNEK_COLS;
+        if (row % 2 === 1) col = SNEK_COLS - 1 - col; /* serpentine */
+        return {
+          left: col * (SNEK_CELL + SNEK_GAP),
+          top: row * (SNEK_CELL + SNEK_GAP)
+        };
+      }
+      for (var c = 0; c < SNEK_COLS * SNEK_ROWS; c++) {
+        var p = cellPos(c);
+        var cellEl = document.createElement("div");
+        cellEl.className = "cell";
+        cellEl.style.left = p.left + "px";
+        cellEl.style.top = p.top + "px";
+        grid.appendChild(cellEl);
+      }
+      for (var s = 0; s < TOTAL_COMMITS; s++) {
+        var sp = cellPos(s);
+        var segEl = document.createElement("div");
+        segEl.className = "seg" + (s === TOTAL_COMMITS - 1 ? " seg-last" : "");
+        segEl.id = "seg-" + s;
+        segEl.style.left = sp.left + "px";
+        segEl.style.top = sp.top + "px";
+        grid.appendChild(segEl);
+      }
+
+      /* ---------- SVG draw prep (deterministic: measured once, synchronously) ---------- */
+      var drawPaths = document.querySelectorAll("#mark .draw");
+      for (var d = 0; d < drawPaths.length; d++) {
+        var len = drawPaths[d].getTotalLength();
+        drawPaths[d].style.strokeDasharray = len;
+        drawPaths[d].style.strokeDashoffset = len;
+      }
+
+      /* =====================================================================
+         TIMELINE
+         cues: assets/music/happy-beats-business-moves-vol-11-...music-cues.json
+         114.84 BPM, beat grid ~0.525s
+         ===================================================================== */
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* ---- music: fade in, hold, fade under the final line ---- */
+      tl.fromTo("#bgm", { volume: 0 }, { volume: 0.34, duration: 0.6, ease: "power1.out" }, 0);
+      tl.to("#bgm", { volume: 0, duration: 1.5, ease: "power1.in" }, 19.5);
+
+      /* ================= SCENE 1 — the number (0 → 3.7) ================= */
+      var addProxy = { v: 0 };
+      var mAdd = document.getElementById("mAdd");
+      tl.to(addProxy, {
+        v: TOTAL_ADD, duration: 1.35, ease: "power2.out",
+        onUpdate: function () { mAdd.textContent = "+" + group(Math.round(addProxy.v)); }
+      }, 0.10);
+
+      tl.fromTo("#w-default", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 0);
+      tl.fromTo("#w-default .m-add", { y: 26 }, { y: 0, duration: 0.7, ease: "power3.out" }, 0);
+
+      /* deletions land on the strong cue */
+      // beat-locked: 1.60s
+      tl.fromTo("#w-default .m-del",
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 1.60);
+
+      tl.to("#s1cap", { opacity: 1, duration: 0.45, ease: "power2.out" }, 1.95);
+      tl.to("#s1cap", { opacity: 0, duration: 0.35, ease: "power2.in" }, 3.40);
+
+      /* ================= SCENE 2 — it's a widget (3.7 → 7.9) ================= */
+      // beat-locked: 3.70s — the pull-back lands on the strong cue
+      tl.fromTo("#cam",
+        { scale: 2.8, x: 633, y: 76 },
+        { scale: 1, x: 0, y: 0, duration: 1.15, ease: "power3.inOut" }, 3.70);
+
+      tl.to("#deskLayer", { opacity: 1, duration: 0.9, ease: "power2.out" }, 3.70);
+      tl.to(".chrome", { opacity: 1, duration: 0.75, ease: "power2.out" }, 3.95);
+
+      tl.fromTo("#lockupTitle",
+        { opacity: 0, y: 34 },
+        { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 4.90);
+      tl.to("#lockupTitle", { opacity: 0, duration: 0.4, ease: "power2.in" }, 7.20);
+
+      /* ================= SCENE 3 — same snapshot, six faces (7.9 → 14.2) ================= */
+      tl.fromTo("#sixLine",
+        { opacity: 0, y: -18 },
+        { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 7.30);
+
+      /* five re-skins on the every-OTHER-beat grid so each label clears its reading floor */
+      // beat-grid: 8.96, 10.01, 11.06, 12.12, 13.18
+      var SWAPS = [8.96, 10.01, 11.06, 12.12, 13.18];
+      for (var w = 0; w < SWAPS.length; w++) {
+        var at = SWAPS[w];
+        tl.to("#w-" + THEMES[w].key,     { opacity: 0, duration: 0.22, ease: "power2.inOut" }, at);
+        tl.to("#w-" + THEMES[w + 1].key, { opacity: 1, duration: 0.22, ease: "power2.inOut" }, at);
+      }
+
+      /* ================= SCENE 4 — the snake (14.2 → 17.9) ================= */
+      tl.to("#snekscene", { opacity: 1, duration: 0.3, ease: "power2.out" }, 14.20);
+      tl.fromTo("#snek-cap",
+        { opacity: 0, y: 18 },
+        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 14.45);
+
+      /* segment growth mirrors the real state thresholds in ActivityVisualization.swift:
+         1-4 hatched → "smol snek" · 5-14 growing → "growing snek" · 15+ thriving → "snek happy" */
+      var snekCount = document.getElementById("snek-count");
+      function segTime(i) {
+        if (i < 4)  return 14.95 + i * 0.13;              /* 1-4   smol */
+        if (i < 14) return 15.75 + (i - 4) * 0.075;       /* 5-14  growing */
+        return 16.55 + (i - 14) * 0.055;                  /* 15-23 happy */
+      }
+      for (var g = 0; g < TOTAL_COMMITS; g++) {
+        var gt = segTime(g);
+        tl.fromTo("#seg-" + g,
+          { opacity: 0, scale: 0.4 },
+          { opacity: 1, scale: 1, duration: 0.22, ease: "back.out(2)" }, gt);
+        tl.call(function (n) {
+          return function () {
+            snekCount.textContent = n + (n === 1 ? " commit" : " commits");
+          };
+        }(g + 1), [], gt);
+      }
+      /* head highlight rides the last segment */
+      tl.to("#seg-" + (TOTAL_COMMITS - 1), { backgroundColor: "#EDF2F7", duration: 0.2 }, segTime(TOTAL_COMMITS - 1));
+
+      tl.to("#snek-s0", { opacity: 1, duration: 0.25, ease: "power2.out" }, 14.95);
+      tl.to("#snek-s0", { opacity: 0, duration: 0.2, ease: "power2.in" }, 15.75);
+      tl.to("#snek-s1", { opacity: 1, duration: 0.25, ease: "power2.out" }, 15.75);
+      tl.to("#snek-s1", { opacity: 0, duration: 0.2, ease: "power2.in" }, 16.55);
+      tl.to("#snek-s2", { opacity: 1, duration: 0.25, ease: "power2.out" }, 16.55);
+
+      /* ================= SCENE 5 — lockup (17.9 → 21.0) ================= */
+      tl.to("#lockup", { opacity: 1, duration: 0.3, ease: "power2.out" }, 17.90);
+      // beat-locked: 17.91s — the mark draws on the strong cue
+      tl.to("#mark .draw", {
+        strokeDashoffset: 0, duration: 0.85, ease: "power2.inOut", stagger: 0.07
+      }, 17.91);
+      tl.to("#mark .node", { opacity: 1, duration: 0.3, ease: "power2.out" }, 18.55);
+      tl.to("#mark .sign", { opacity: 1, duration: 0.35, ease: "power2.out", stagger: 0.08 }, 18.70);
+
+      tl.fromTo("#wordmark",
+        { opacity: 0, y: 26 },
+        { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 18.70);
+      tl.fromTo("#tagline",
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 18.95);
+      tl.to("#footer", { opacity: 1, duration: 0.5, ease: "power2.out" }, 19.55);
+      tl.fromTo("#joke",
+        { opacity: 0, y: 14 },
+        { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 20.05);
+
+      /* =====================================================================
+         Audio-reactive: the widget surface and the desktop glow breathe with
+         the bed. Subtle only — no waveform, no equalizer, no pulsing text.
+         ===================================================================== */
+      var AFPS = window.AUDIO_FPS || 30;
+      var BASS = window.AUDIO_BASS || [];
+      var ENERGY = window.AUDIO_ENERGY || [];
+      function applyAudio(i) {
+        gsap.set("#pulse", { scale: 1 + BASS[i] * 0.014 });
+        gsap.set("#glow", { opacity: 0.30 + ENERGY[i] * 0.9 });
+      }
+      for (var f = 0; f < BASS.length; f++) {
+        tl.call(function (n) { return function () { applyAudio(n); }; }(f), [], f / AFPS);
+      }
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

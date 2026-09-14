@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gitlines — hero: exploded view</title>
+<link rel="icon" href="../assets/favicon.png"><link rel="stylesheet" href="../assets/widget.css">
+<style>
+  :root { --ink:#090C10; --text:#EDF2F7; --muted:#8592A3; --green:#38CC75; --font:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Inter, Arial, sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--ink); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .hint { position:fixed; inset:0 0 auto 0; z-index:3; display:flex; justify-content:space-between; padding:18px 24px; font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .scroll { height:600vh; } .stick { position:sticky; top:0; height:100vh; overflow:hidden; display:grid; place-items:center; perspective:1800px; }
+  .rig { width:min(820px, 78vw); transform-style:preserve-3d; will-change:transform; }
+  .rig .gl-widget, .rig .w, .rig .w-body, .rig .w-right, .rig .w-metrics { transform-style:preserve-3d; }
+  .rig .w { transition:background .4s, border-color .4s, color .4s; }
+  .rig .layer { will-change:transform; }
+  /* a ghost outline of the surface stays at z=0 so the eye keeps the base plane */
+  .ghost { position:absolute; inset:0; border:1px dashed rgba(255,255,255,.18); border-radius:var(--radius); pointer-events:none; opacity:0; }
+  .tags { position:absolute; inset:0; pointer-events:none; }
+  .tag { position:absolute; font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); opacity:0; transition:opacity .3s; white-space:nowrap; }
+  .tag::before { content:""; position:absolute; top:50%; width:46px; height:1px; background:rgba(255,255,255,.3); } .tag.r::before { right:100%; margin-right:8px; } .tag.l::before { left:100%; margin-left:8px; }
+  .cap { position:absolute; left:6vw; bottom:9vh; max-width:560px; pointer-events:none; }
+  .cap h1 { font-size:clamp(30px,4.4vw,60px); letter-spacing:-.03em; line-height:1.02; margin:0 0 10px; } .cap p { margin:0; color:var(--muted); font-size:17px; }
+  .cap .k { font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--green); margin-bottom:10px; }
+  .theme { position:absolute; right:6vw; bottom:9vh; font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); text-align:right; }
+  .theme b { display:block; font-size:22px; color:var(--text); letter-spacing:-.01em; text-transform:none; font-family:var(--font); margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="hint"><span>Gitlines · hero: exploded view</span><span>Scroll ↓</span></div>
+<div class="scroll" id="scroll"><div class="stick">
+  <div class="rig" id="rig"><div id="w"></div><div class="ghost" id="ghost"></div>
+    <div class="tags">
+      <span class="tag r" style="right:102%; top:6%">Header · period pill</span>
+      <span class="tag r" style="right:102%; top:42%">Signed numerics</span>
+      <span class="tag l" style="left:102%; top:26%">Activity bars</span>
+      <span class="tag l" style="left:102%; top:62%">Repository ledger</span>
+      <span class="tag r" style="right:102%; top:88%">Freshness</span>
+    </div>
+  </div>
+  <div class="cap"><div class="k">One widget, every face</div><h1 id="h">Every layer, hand-built.</h1><p id="p">Header, numerics, bars, ledger, freshness. Scroll to take it apart.</p></div>
+  
+</div></div>
+<script src="../assets/widget.js"></script>
+<script>
+(function(){
+  var w = document.getElementById('w'), rig = document.getElementById('rig'), ghost = document.getElementById('ghost'), tags = [].slice.call(document.querySelectorAll('.tag'));
+  var order = ['default','glasshouse','phosphor','broadsheet','arcade','blockwork'], curTheme = -1, layers;
+  function mount(i){ curTheme = i; Gitlines.mount(w, order[i]); 
+    layers = [ [w.querySelector('.w-head'), 1], [w.querySelector('.w-metrics'), 2.2], [w.querySelector('.bars, .bars-glyph'), 1.6], [w.querySelector('.repos'), 2.8], [w.querySelector('.w-foot'), 1.2] ];
+    layers.forEach(function(l){ if (l[0]) l[0].classList.add('layer'); }); }
+  mount(0);
+  var ease = function(t){ return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; };
+  var scroll = document.getElementById('scroll');
+  function layout(){
+    var r = scroll.getBoundingClientRect(), p = Math.min(1, Math.max(0, -r.top/(r.height-innerHeight)));
+    /* six cycles, one per theme: explode over the first half of each cycle, reassemble over the second, swap theme at the seam */
+    var cyc = p * 6, i = Math.min(5, Math.floor(cyc)), t = cyc - i, x = t < .5 ? ease(t/.5) : ease(1 - (t-.5)/.5);
+    if (i !== curTheme) mount(i);
+    rig.style.transform = 'rotateX(' + (x*44) + 'deg) rotateY(' + (-x*28) + 'deg) scale(' + (1 - x*.12) + ')';
+    layers.forEach(function(l){ if (l[0]) l[0].style.transform = 'translateZ(' + (x*110*l[1]) + 'px)'; });
+    ghost.style.opacity = x; tags.forEach(function(tg){ tg.style.opacity = x > .85 ? 1 : 0; });
+    document.getElementById('h').textContent = x > .5 ? 'Same layers. Same numbers.' : 'Every layer, hand-built.';
+  }
+  addEventListener('scroll', layout, { passive:true }); addEventListener('resize', layout); layout();
+})();
+</script>
+</body>
+</html>

@@ -50,11 +50,14 @@ final class GitHubAccountModel: ObservableObject {
     }
 
     private let service: GitHubActivityService
+    private let isSampleSession: Bool
     private var didBootstrap = false
     private var storedConnections: [GitHubStoredConnection] = []
 
     init(service: GitHubActivityService = GitHubActivityService()) {
         self.service = service
+        isSampleSession = ProcessInfo.processInfo.arguments.contains("--sample-data")
+        guard !isSampleSession else { return }
         username = SharedPreferences.defaults.string(forKey: SharedPreferences.Key.githubUsername) ?? ""
         lastRefresh = SharedPreferences.defaults.object(
             forKey: SharedPreferences.Key.lastSuccessfulRefresh
@@ -93,6 +96,13 @@ final class GitHubAccountModel: ObservableObject {
     func bootstrap() async {
         guard !didBootstrap else { return }
         didBootstrap = true
+
+        // Keeps App Store screenshots and demos free of the owner's private repository data.
+        // A normal first launch reaches the same disconnected sample state without this flag.
+        guard !isSampleSession else {
+            phase = .disconnected
+            return
+        }
 
         let refreshRequested = SharedPreferences.defaults.bool(
             forKey: SharedPreferences.Key.githubRefreshRequested

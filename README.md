@@ -10,7 +10,11 @@
 - **Activity across branches** — discovers recent work beyond the default branch and deduplicates commits that appear on more than one branch.
 - **Personal and organization repositories** — connect a personal GitHub account and add organization access independently with fine-grained, read-only tokens.
 - **Four widget sizes** — purpose-built small, medium, large, and extra-large layouts rather than one stretched design.
-- **Snapshot dashboard** — review the activity pulse, change shape, rhythm, repository ledger, and a plain-language review in the host app, with its own daily/weekly/monthly and calendar/rolling toggles.
+- **Repository explorer** — search every accessible repository, including inactive ones; filter by owner, visibility, activity, archive status or favourites, and sort by commits, changed lines, last push or name.
+- **Historical dashboard** — navigate daily, weekly and monthly calendar/rolling periods or custom dates, with equivalent-period comparisons, active-day counts and switchable commit/line charts.
+- **Repository details and comparison** — select repositories for combined totals and side-by-side comparisons; open individual activity charts and commit history with links to GitHub.
+- **Activity calendar** — inspect 13 weeks of activity and click a day to see its commits. Unsynced days and repositories are marked explicitly.
+- **Independent dashboard themes** — all six themes apply to the explorer, charts, calendar and repository details.
 - **Resilient refreshes** — configurable refresh timing, lightweight widget refreshes, remembered activity branches, cached results, stale-data indicators, and retry states.
 - **Native macOS behavior** — WidgetKit configuration, desktop vibrant-mode support, immediate timeline reloads, and App Store-delivered updates.
 
@@ -70,9 +74,22 @@ That command performs an unsigned compile check. Unsigned validation artifacts a
 
 XcodeBuildMCP settings live in `.xcodebuildmcp/config.yaml`; they enable macOS builds, project discovery, and Xcode 26's IDE bridge while keeping the project and host-app scheme selected by default.
 
+## GitHub sign-in
+
+In **Connections**, choose the repositories Gitlines may read on GitHub, then select
+**Sign in with GitHub**. Copy the short verification code into GitHub's device page
+and approve sign-in. No personal access token needs to be created or pasted.
+The GitHub App requests read-only Contents and Metadata access. Existing manual
+connections remain available under the advanced controls.
+
+The current development registration, **Gitlines Desktop**, is limited to the
+`yjay18` account. Other accounts and organizations require a separately approved
+registration visibility change before distribution. Setup and validation details
+are in [docs/GITHUB-SIGN-IN.md](docs/GITHUB-SIGN-IN.md).
+
 ## Data boundary
 
-`GitHubActivityService` in `widtgetApp/GitHubActivityService.swift` is the only GitHub API client. The host app keeps personal access tokens in the app-scoped macOS data-protection Keychain, turns API responses into display-ready daily, weekly, and monthly snapshots, and writes those snapshots atomically to the shared App Group container. `ActivityDataSource` in `widtget/Provider/ActivityProvider.swift` only reads that cache, so the widget extension never receives tokens or makes authenticated requests.
+`GitHubActivityService` reads repository activity; `GitHubSignInService` handles GitHub device authorization and token renewal. The host app keeps access and refresh tokens in the app-scoped macOS data-protection Keychain, turns API responses into display-ready daily, weekly, and monthly snapshots, and writes those snapshots atomically to the shared App Group container. `ActivityDataSource` in `widtget/Provider/ActivityProvider.swift` only reads that cache, so the widget extension never receives tokens or makes authenticated requests.
 
 Deterministic snapshots remain limited to Xcode previews. A widget without cached data displays a setup prompt, and tapping a connected widget opens the authenticated user's GitHub profile. `Gitlines` does not claim to be an official GitHub product.
 

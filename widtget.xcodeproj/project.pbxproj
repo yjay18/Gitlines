@@ -52,6 +52,9 @@
 		A10000000000000000000020 /* PhosphorWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* PhosphorWidgetView.swift */; };
 		A10000000000000000000021 /* BroadsheetWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* BroadsheetWidgetView.swift */; };
 		A10000000000000000000022 /* ArcadeWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* ArcadeWidgetView.swift */; };
+		A10000000000000000000025 /* GitHubSignInService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* GitHubSignInService.swift */; };
+		A10000000000000000000026 /* DashboardHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* DashboardHistory.swift */; };
+		A10000000000000000000027 /* RepositoryDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000027 /* RepositoryDashboardView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -113,6 +116,9 @@
 		B10000000000000000000020 /* PhosphorWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhosphorWidgetView.swift; sourceTree = "<group>"; };
 		B10000000000000000000021 /* BroadsheetWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadsheetWidgetView.swift; sourceTree = "<group>"; };
 		B10000000000000000000022 /* ArcadeWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcadeWidgetView.swift; sourceTree = "<group>"; };
+		B10000000000000000000025 /* GitHubSignInService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubSignInService.swift; sourceTree = "<group>"; };
+		B10000000000000000000026 /* DashboardHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHistory.swift; sourceTree = "<group>"; };
+		B10000000000000000000027 /* RepositoryDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryDashboardView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -245,6 +251,9 @@
 				B1000000000000000000001B /* DashboardAnalytics.swift */,
 				B10000000000000000000019 /* GitHubAccountModel.swift */,
 				B10000000000000000000018 /* GitHubActivityService.swift */,
+				B10000000000000000000025 /* GitHubSignInService.swift */,
+				B10000000000000000000027 /* RepositoryDashboardView.swift */,
+				B10000000000000000000026 /* DashboardHistory.swift */,
 				B10000000000000000000014 /* Info.plist */,
 				B10000000000000000000015 /* widtgetApp.entitlements */,
 			);
@@ -407,6 +416,9 @@
 				A1000000000000000000001C /* AnalyticsDashboardView.swift in Sources */,
 				A10000000000000000000023 /* ThemePalette.swift in Sources */,
 				A10000000000000000000018 /* GitHubActivityService.swift in Sources */,
+				A10000000000000000000025 /* GitHubSignInService.swift in Sources */,
+				A10000000000000000000027 /* RepositoryDashboardView.swift in Sources */,
+				A10000000000000000000026 /* DashboardHistory.swift in Sources */,
 				A1000000000000000000000F /* WidtgetHostApp.swift in Sources */,
 				A10000000000000000000010 /* WidgetSettingsView.swift in Sources */,
 				A10000000000000000000011 /* WidgetPreferences.swift in Sources */,

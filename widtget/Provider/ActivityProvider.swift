@@ -20,13 +20,25 @@ struct ActivityProvider: AppIntentTimelineProvider {
             date: .now,
             configuredPeriod: .daily,
             period: .daily,
-            username: "github",
-            snapshot: .loading
+            username: ActivitySnapshotArchive.sample.username,
+            snapshot: .daily
         )
     }
 
     func snapshot(for configuration: WidtgetConfigurationIntent, in context: Context) async -> ActivityEntry {
-        entry(for: configuration, context: context, date: .now)
+        let entry = entry(for: configuration, context: context, date: .now)
+        guard context.isPreview, entry.snapshot.state == .setupRequired else { return entry }
+        return ActivityEntry(
+            date: entry.date,
+            configuredPeriod: entry.configuredPeriod,
+            period: entry.period,
+            username: ActivitySnapshotArchive.sample.username,
+            snapshot: ActivitySnapshotArchive.sample.snapshot(
+                for: entry.period.storedPeriod,
+                windowMode: SharedPreferences.windowMode
+            ),
+            preferences: entry.preferences
+        )
     }
 
     func timeline(for configuration: WidtgetConfigurationIntent, in context: Context) async -> Timeline<ActivityEntry> {
@@ -227,5 +239,18 @@ extension ActivitySnapshot {
         updatedAt: .now.addingTimeInterval(-2 * 60 * 60),
         state: .error,
         errorMessage: "Couldn’t refresh"
+    )
+}
+
+extension ActivitySnapshotArchive {
+    static let sample = ActivitySnapshotArchive(
+        username: "octocat",
+        daily: .daily,
+        weekly: .weekly,
+        rollingDaily: .daily,
+        rollingWeekly: .weekly,
+        monthly: .monthly,
+        rollingMonthly: .monthly,
+        savedAt: .now.addingTimeInterval(-8 * 60)
     )
 }

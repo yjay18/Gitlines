@@ -28,6 +28,7 @@ struct GitHubStoredConnection: Codable, Identifiable, Sendable {
     let repositoryCount: Int?
     let privateRepositoryCount: Int?
     let validatedAt: Date?
+    var oauth: GitHubOAuthSession? = nil
 }
 
 struct GitHubConnectionSummary: Identifiable, Equatable, Sendable {
@@ -36,8 +37,10 @@ struct GitHubConnectionSummary: Identifiable, Equatable, Sendable {
     let kind: GitHubConnectionKind
     let repositoryCount: Int?
     let privateRepositoryCount: Int?
+    let usesGitHubSignIn: Bool
 
     init(connection: GitHubStoredConnection) {
+        usesGitHubSignIn = connection.oauth != nil
         id = connection.id
         owner = connection.owner
         kind = connection.kind
@@ -179,7 +182,8 @@ enum GitHubTokenStore {
                 token: token,
                 repositoryCount: connection.repositoryCount,
                 privateRepositoryCount: connection.privateRepositoryCount,
-                validatedAt: connection.validatedAt
+                validatedAt: connection.validatedAt,
+                oauth: connection.oauth
             )
         }
     }
@@ -220,9 +224,9 @@ enum GitHubActivityError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidToken:
-            "GitHub rejected this token. Check that it is active and try again."
+            "GitHub rejected this connection. Sign in again, or replace the token if you connected manually."
         case .accessDenied:
-            "This token needs read-only Contents access to the repositories you want to include."
+            "Gitlines needs read-only Contents access to these repositories. Review repository access on GitHub."
         case .rateLimited(let resetAt):
             if let resetAt {
                 "GitHub’s API limit was reached. Try again after \(resetAt.formatted(date: .omitted, time: .shortened))."
@@ -232,7 +236,7 @@ enum GitHubActivityError: LocalizedError {
         case .notFound:
             "A GitHub repository or branch is no longer available."
         case .tokenAccountMismatch:
-            "Every connected token must belong to the same GitHub account."
+            "Use the same GitHub account as your existing connection. Disconnect first to switch accounts."
         case .invalidOrganizationName:
             "Enter a valid GitHub organization name."
         case .organizationNotAccessible(let owner):
@@ -300,6 +304,11 @@ struct GitHubActivityService: Sendable {
     init(session: URLSession = .shared, calendar: Calendar = .autoupdatingCurrent) {
         self.session = session
         self.calendar = calendar
+    }
+
+    func username(token: String) async throws -> String {
+        let user: UserResponse = try await get(path: "/user", token: token)
+        return user.login
     }
 
     func inspectToken(
@@ -471,6 +480,9 @@ struct GitHubActivityService: Sendable {
     }
 
     private func repositoriesActive(since date: Date, token: String) async throws -> [RepositoryResponse] {
+        if token.hasPrefix("ghu_") {
+            return try await appRepositories(token: token).filter { ($0.pushedAt ?? .distantPast) >= date }
+        }
         var active: [RepositoryResponse] = []
         var page = 1
 
@@ -498,7 +510,106 @@ struct GitHubActivityService: Sendable {
         return active
     }
 
+    // Dashboard history is host-only; no credentials enter the returned cache.
+    func fetchDashboardHistory(
+        tokens: [String], range: DateInterval, existing: DashboardHistory?,
+        progress: @escaping @Sendable (DashboardHistory, String, Int, Int) async -> Void
+    ) async throws -> DashboardHistory {
+        var username: String?
+        var authorized: [String: AuthorizedRepository] = [:]
+        for token in tokens {
+            let identity = try await self.username(token: token)
+            if let username, identity.caseInsensitiveCompare(username) != .orderedSame {
+                throw GitHubActivityError.tokenAccountMismatch
+            }
+            username = identity
+            for repository in try await allRepositories(token: token) {
+                authorized[repository.fullName.lowercased()] = authorized[repository.fullName.lowercased()]
+                    ?? AuthorizedRepository(repository: repository, token: token)
+            }
+        }
+        guard let username else { throw GitHubActivityError.invalidToken }
+        var history = existing?.username.caseInsensitiveCompare(username) == .orderedSame
+            ? existing! : DashboardHistory(username: username)
+        let repositories = authorized.values.sorted { $0.repository.fullName < $1.repository.fullName }
+        history.repositories = repositories.map {
+            DashboardRepository(id: $0.repository.fullName, isPrivate: $0.repository.isPrivate,
+                                isArchived: $0.repository.archived ?? false, pushedAt: $0.repository.pushedAt)
+        }
+        let allowed = Set(history.repositories.map(\.id))
+        history.commits.removeAll { !allowed.contains($0.repository) }
+        history.coverage = history.coverage.filter { allowed.contains($0.key) }
+        history.catalogUpdatedAt = .now
+        history.asOf = max(history.asOf ?? range.end, range.end)
+        await progress(history, "Repository list updated", 0, repositories.count)
+        for (index, authorized) in repositories.enumerated() {
+            try Task.checkCancellation()
+            let repository = authorized.repository
+            let name = repository.fullName
+            await progress(history, "Syncing \(name)", index, repositories.count)
+            do {
+                let scan: RepositoryCommitScan
+                // Empty repositories have no branches and GitHub returns 409 for them.
+                if repository.size == 0 && repository.pushedAt == nil {
+                    scan = RepositoryCommitScan(repositoryFullName: name, references: [], activeBranches: [])
+                } else {
+                    scan = try await commitReferences(repository: repository, username: username,
+                        since: range.start, until: range.end, token: authorized.token,
+                        scope: .allBranches, cachedBranches: [:])
+                }
+                let references = Dictionary(scan.references.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }).values
+                let cached = Dictionary(history.commits.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                var commits: [DashboardCommit] = []
+                var checkpointCount = 0
+                for batch in Array(references).batches(of: 8) {
+                    try Task.checkCancellation()
+                    let fetched = try await withThrowingTaskGroup(of: DashboardCommit.self) { group in
+                        for reference in batch {
+                            group.addTask {
+                                if let saved = cached[reference.id] { return saved }
+                                let detail: CommitDetailResponse = try await get(
+                                    path: "/repos/\(name)/commits/\(reference.sha)", token: authorized.token)
+                                return DashboardCommit(repository: name, sha: reference.sha, date: reference.authoredAt,
+                                    message: detail.commit?.message?.components(separatedBy: .newlines).first ?? String(reference.sha.prefix(7)),
+                                    additions: detail.stats.additions, deletions: detail.stats.deletions)
+                            }
+                        }
+                        var result: [DashboardCommit] = []
+                        for try await commit in group { result.append(commit) }
+                        return result
+                    }
+                    commits.append(contentsOf: fetched)
+                    // Keep successful detail requests across cancellation or rate limits.
+                    // Coverage is recorded only after every branch/detail has succeeded.
+                    let newValues = fetched.filter { cached[$0.id] == nil }
+                    history.commits.append(contentsOf: newValues)
+                    checkpointCount += fetched.count
+                    if checkpointCount >= 64 {
+                        checkpointCount = 0
+                        await progress(history, "Syncing \(name) · \(commits.count)/\(references.count) commits", index, repositories.count)
+                    }
+                }
+                history.replaceCommits(for: name, in: range, with: commits.filter { $0.date >= range.start && $0.date < range.end })
+                history.coverage[name, default: DashboardCoverage()].record(range, at: .now)
+            } catch is CancellationError { throw CancellationError() }
+            catch {
+                history.coverage[name, default: DashboardCoverage()].error = error.localizedDescription
+                if case GitHubActivityError.rateLimited = error {
+                    await progress(history, "GitHub rate limit reached", index, repositories.count)
+                    throw error
+                }
+                if case GitHubActivityError.invalidToken = error {
+                    await progress(history, "Authorization needs attention", index, repositories.count)
+                    throw error
+                }
+            }
+            await progress(history, "Synced \(index + 1) of \(repositories.count) repositories", index + 1, repositories.count)
+        }
+        return history
+    }
+
     private func allRepositories(token: String) async throws -> [RepositoryResponse] {
+        if token.hasPrefix("ghu_") { return try await appRepositories(token: token) }
         var repositories: [RepositoryResponse] = []
         var page = 1
 
@@ -522,6 +633,40 @@ struct GitHubActivityService: Sendable {
         }
 
         return repositories
+    }
+
+    // GitHub App tokens see only explicitly installed repositories. /user/repos can
+    // list repositories the user knows about but this installation cannot read.
+    private func appRepositories(token: String) async throws -> [RepositoryResponse] {
+        var installations: [InstallationResponse] = []
+        var page = 1
+        while true {
+            let response: InstallationsResponse = try await get(
+                path: "/user/installations",
+                query: [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: String(page))],
+                token: token
+            )
+            installations.append(contentsOf: response.installations)
+            if response.installations.count < 100 { break }
+            page += 1
+        }
+        var repositories: [String: RepositoryResponse] = [:]
+        for installation in installations where installation.suspendedAt == nil {
+            page = 1
+            while true {
+                let response: InstallationRepositoriesResponse = try await get(
+                    path: "/user/installations/\(installation.id)/repositories",
+                    query: [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: String(page))],
+                    token: token
+                )
+                for repository in response.repositories {
+                    repositories[repository.fullName.lowercased()] = repository
+                }
+                if response.repositories.count < 100 { break }
+                page += 1
+            }
+        }
+        return repositories.values.sorted { $0.fullName < $1.fullName }
     }
 
     private func commitReferences(
@@ -706,11 +851,18 @@ struct GitHubActivityService: Sendable {
 
     private func commitDetails(references: [CommitReference]) async throws -> [CommitActivity] {
         var activities: [CommitActivity] = []
+        let saved = (try? DashboardHistoryStore.read())?.commits ?? []
+        let cached = Dictionary(saved.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         for batch in references.batches(of: 8) {
             let values = try await withThrowingTaskGroup(of: CommitActivity.self) { group in
                 for reference in batch {
                     group.addTask {
+                        if let commit = cached[reference.id] {
+                            return CommitActivity(repositoryName: reference.repositoryName,
+                                repositoryFullName: reference.repositoryFullName, authoredAt: reference.authoredAt,
+                                additions: commit.additions, deletions: commit.deletions)
+                        }
                         let detail: CommitDetailResponse = try await get(
                             path: "/repos/\(reference.repositoryFullName)/commits/\(reference.sha)",
                             token: reference.token
@@ -868,13 +1020,15 @@ private struct RepositoryResponse: Decodable, Sendable {
     let pushedAt: Date?
     let defaultBranch: String
     let isPrivate: Bool
+    let archived: Bool?
+    let size: Int?
 
     var ownerName: String {
         fullName.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
     }
 
     enum CodingKeys: String, CodingKey {
-        case name
+        case name, archived, size
         case fullName = "full_name"
         case pushedAt = "pushed_at"
         case defaultBranch = "default_branch"
@@ -897,6 +1051,7 @@ private struct CommitListResponse: Decodable, Sendable {
 }
 
 private struct CommitMetadata: Decodable, Sendable {
+    let message: String?
     let author: GitActorDate?
     let committer: GitActorDate?
 }
@@ -906,6 +1061,7 @@ private struct GitActorDate: Decodable, Sendable {
 }
 
 private struct CommitDetailResponse: Decodable, Sendable {
+    let commit: CommitMetadata?
     let stats: CommitStats
 }
 
@@ -1023,4 +1179,16 @@ private extension Array {
             Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
+}
+
+private struct InstallationResponse: Decodable {
+    let id: Int
+    let suspendedAt: Date?
+    enum CodingKeys: String, CodingKey { case id; case suspendedAt = "suspended_at" }
+}
+private struct InstallationsResponse: Decodable {
+    let installations: [InstallationResponse]
+}
+private struct InstallationRepositoriesResponse: Decodable {
+    let repositories: [RepositoryResponse]
 }

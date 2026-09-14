@@ -34,12 +34,16 @@ struct WidgetSettingsView: View {
     @State private var showingRemoveOrganizationConfirmation = false
     @State private var organizationPendingRemoval: GitHubConnectionSummary?
     @State private var isReplacingAccountToken = false
+    @State private var isUsingManualToken = false
     @State private var isAddingOrganization = false
     @State private var selectedSection: HostSection = .dashboard
     @State private var dashboardWindowMode = SharedPreferences.windowMode
     @State private var dashboardPeriod = SharedPreferences.defaults
         .string(forKey: SharedPreferences.Key.dashboardPeriod)
         .flatMap(ActivityPeriod.init(rawValue:)) ?? .weekly
+    @State private var dashboardTheme = SharedPreferences.defaults
+        .string(forKey: SharedPreferences.Key.dashboardTheme)
+        .flatMap(WidgetVisualTheme.init(rawValue:)) ?? SharedPreferences.modularPreferences.visualTheme
     @State private var paneOrder = SharedPreferences.modularPreferences.paneOrder
     @State private var enabledPanes = SharedPreferences.modularPreferences.enabledPanes
     @State private var blockworkColorway = SharedPreferences.modularPreferences.colorway
@@ -81,28 +85,38 @@ struct WidgetSettingsView: View {
     @State private var draggedOrigin: WidgetSlotOrigin?
 
     var body: some View {
+        hostContent
+        .confirmationDialog(
+            "Disconnect @\(github.username)?",
+            isPresented: $showingDisconnectConfirmation
+        ) {
+            Button("Disconnect GitHub", role: .destructive) {
+                github.disconnect()
+            }
+        } message: {
+            Text("The Keychain token and cached widget activity will be removed from this Mac.")
+        }
+        .confirmationDialog(
+            "Remove \(organizationPendingRemoval?.owner ?? "organization")?",
+            isPresented: $showingRemoveOrganizationConfirmation
+        ) {
+            Button("Remove organization", role: .destructive) {
+                guard let id = organizationPendingRemoval?.id else { return }
+                Task { await github.removeOrganization(id: id) }
+            }
+        } message: {
+            Text("Its token will be removed from Keychain and its repositories will stop contributing to the widget.")
+        }
+    }
+
+    private var hostContent: some View {
         HStack(spacing: 0) {
             sidebar
 
             Group {
                 switch selectedSection {
                 case .dashboard:
-                    if visualTheme == .blockwork {
-                        BlockworkAnalyticsDashboardView(
-                            github: github,
-                            period: $dashboardPeriod,
-                            windowMode: $dashboardWindowMode,
-                            openConnections: { selectedSection = .connections }
-                        )
-                    } else {
-                        AnalyticsDashboardView(
-                            github: github,
-                            period: $dashboardPeriod,
-                            windowMode: $dashboardWindowMode,
-                            openConnections: { selectedSection = .connections }
-                        )
-                        .environment(\.themePalette, visualTheme.dashboardPalette)
-                    }
+                    dashboardContent
                 case .widgets:
                     widgetStudioContent
                 case .connections:
@@ -138,6 +152,9 @@ struct WidgetSettingsView: View {
             SharedPreferences.windowMode = newValue
             reloadWidgets()
         }
+        .onChange(of: dashboardTheme) { _, newValue in
+            SharedPreferences.defaults.set(newValue.rawValue, forKey: SharedPreferences.Key.dashboardTheme)
+        }
         .onChange(of: dashboardPeriod) { _, newValue in
             SharedPreferences.defaults.set(newValue.rawValue, forKey: SharedPreferences.Key.dashboardPeriod)
         }
@@ -151,27 +168,15 @@ struct WidgetSettingsView: View {
             guard url.scheme == "widtget", url.host == "refresh" else { return }
             Task { await github.refresh(scope: .recentBranches) }
         }
-        .confirmationDialog(
-            "Disconnect @\(github.username)?",
-            isPresented: $showingDisconnectConfirmation
-        ) {
-            Button("Disconnect GitHub", role: .destructive) {
-                github.disconnect()
-            }
-        } message: {
-            Text("The Keychain token and cached widget activity will be removed from this Mac.")
-        }
-        .confirmationDialog(
-            "Remove \(organizationPendingRemoval?.owner ?? "organization")?",
-            isPresented: $showingRemoveOrganizationConfirmation
-        ) {
-            Button("Remove organization", role: .destructive) {
-                guard let id = organizationPendingRemoval?.id else { return }
-                Task { await github.removeOrganization(id: id) }
-            }
-        } message: {
-            Text("Its token will be removed from Keychain and its repositories will stop contributing to the widget.")
-        }
+    }
+
+    private var dashboardContent: some View {
+        RepositoryDashboardView(
+            github: github, period: $dashboardPeriod, windowMode: $dashboardWindowMode,
+            openConnections: { selectedSection = .connections }
+        )
+        .environment(\.themePalette, dashboardTheme.dashboardPalette)
+        .environment(\.colorScheme, dashboardTheme == .broadsheet || dashboardTheme == .blockwork ? .light : .dark)
     }
 
     private var sidebar: some View {
@@ -229,6 +234,25 @@ struct WidgetSettingsView: View {
                 }
             }
             .padding(.horizontal, 9)
+
+            if selectedSection == .dashboard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DASHBOARD THEME")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(DashboardPalette.muted)
+                    Picker("Dashboard theme", selection: $dashboardTheme) {
+                        ForEach(WidgetVisualTheme.allCases) { theme in
+                            Text(theme.displayName).tag(theme)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .help("Choose the dashboard appearance. Widget themes are set in Widget Studio.")
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+            }
 
             Spacer()
 
@@ -849,16 +873,13 @@ struct WidgetSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                githubSignInSection
                 if !github.hasStoredToken {
-                    githubConnectionSection
+                    DisclosureGroup("Use a personal access token instead", isExpanded: $isUsingManualToken) {
+                        githubConnectionSection
+                    }
                 } else {
                     connectionManagementSection
-                    if let message = github.message {
-                        connectionError(message)
-                    }
-                    if let notice = github.notice {
-                        connectionNotice(notice)
-                    }
                 }
                 refreshIntervalSection
                 snekBlockSection
@@ -983,6 +1004,79 @@ struct WidgetSettingsView: View {
         }
     }
 
+    private var githubSignInSection: some View {
+        GroupBox("GitHub sign-in") {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(github.usesGitHubSignIn
+                     ? "Connected with GitHub as @\(github.username)"
+                     : (github.hasStoredToken ? "Connected with a personal access token" : "GitHub is not connected"),
+                      systemImage: github.usesGitHubSignIn ? "checkmark.circle.fill" : "person.crop.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Choose the repositories Gitlines may read on GitHub, then sign in. Contents and metadata access is read-only.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    if let url = GitHubSignInConfiguration.installationURL {
+                        Link("Choose repositories on GitHub", destination: url)
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    Spacer()
+                    if !github.isSigningIn {
+                        Button(github.usesGitHubSignIn ? "Sign in again" : "Sign in with GitHub") {
+                            github.beginSignIn()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(github.isBusy)
+                    }
+                }
+
+                if let device = github.deviceAuthorization {
+                    Divider()
+                    Text("Enter this code on github.com/login/device")
+                        .font(.system(size: 11, weight: .medium))
+                    Text(device.userCode)
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
+                        .textSelection(.enabled)
+                        .accessibilityLabel("GitHub verification code: \(device.userCode)")
+                    HStack {
+                        Button("Copy code and open GitHub") { github.openGitHubSignIn() }
+                            .buttonStyle(.borderedProminent)
+                        Spacer()
+                        Text("Expires \(device.expiresAt, style: .relative)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if github.isSigningIn {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(github.signInStatus ?? "Connecting to GitHub…")
+                            .font(.system(size: 11))
+                        Spacer()
+                        Button("Cancel sign-in") { github.cancelSignIn() }
+                    }
+                }
+                Text("Credentials stay in this Mac’s Keychain. Widgets receive activity snapshots only.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                if !github.isSigningIn, let status = github.signInStatus {
+                    Text(status)
+                        .font(.system(size: 11, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let message = github.message {
+                    connectionError(message)
+                }
+                if let notice = github.notice {
+                    connectionNotice(notice)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
     private var githubConnectionSection: some View {
         GroupBox("GitHub activity") {
             VStack(alignment: .leading, spacing: 12) {
@@ -1037,7 +1131,7 @@ struct WidgetSettingsView: View {
 
                 Divider()
 
-                tokenDisclosure(title: "Replace account token", isExpanded: $isReplacingAccountToken) {
+                tokenDisclosure(title: "Advanced: replace with a personal access token", isExpanded: $isReplacingAccountToken) {
                     VStack(alignment: .leading, spacing: 8) {
 
                     HStack {
@@ -1082,7 +1176,7 @@ struct WidgetSettingsView: View {
 
                 Divider()
 
-                tokenDisclosure(title: "Add organization", isExpanded: $isAddingOrganization) {
+                tokenDisclosure(title: "Advanced: add an organization token", isExpanded: $isAddingOrganization) {
                     VStack(alignment: .leading, spacing: 8) {
 
                     TextField("GitHub organization name", text: $github.organizationInput)
@@ -1144,6 +1238,9 @@ struct WidgetSettingsView: View {
                 Text(connection.kind == .account ? "@\(connection.owner)" : connection.owner)
                     .font(.system(size: 12, weight: .semibold))
 
+                Text(connection.usesGitHubSignIn ? "GitHub sign-in" : "Personal access token")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
                 if let repositoryCount = connection.repositoryCount,
                    let privateRepositoryCount = connection.privateRepositoryCount {
                     Text("\(repositoryCount) \(repositoryCount == 1 ? "repository" : "repositories") · \(privateRepositoryCount) private")

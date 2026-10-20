@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 enum GitHubTokenStoreError: LocalizedError {
@@ -80,18 +81,26 @@ enum GitHubTokenStore {
         return connections
     }
 
-    private static func decodeConnections(
+    static func decodeConnections(
         _ data: Data,
         defaultUsername: String
     ) throws -> [GitHubStoredConnection] {
-        if let archive = try? JSONDecoder().decode(GitHubTokenArchive.self, from: data),
-           archive.schemaVersion == GitHubTokenArchive.currentSchemaVersion {
+        if let archive = try? JSONDecoder().decode(GitHubTokenArchive.self, from: data) {
+            guard archive.schemaVersion == GitHubTokenArchive.currentSchemaVersion else {
+                throw GitHubTokenStoreError.invalidTokenData
+            }
             return normalized(archive.connections)
         }
         if let tokens = try? JSONDecoder().decode([String].self, from: data) {
             return legacyConnections(tokens: tokens, defaultUsername: defaultUsername)
         }
-        if let legacyToken = String(data: data, encoding: .utf8), !legacyToken.isEmpty {
+        if let raw = String(data: data, encoding: .utf8) {
+            let legacyToken = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A corrupt/unsupported JSON archive must never become a bearer token.
+            guard !legacyToken.isEmpty,
+                  !["{", "[", "\""].contains(legacyToken.first.map(String.init) ?? ""),
+                  !legacyToken.unicodeScalars.contains(where: CharacterSet.whitespacesAndNewlines.contains)
+            else { throw GitHubTokenStoreError.invalidTokenData }
             return legacyConnections(tokens: [legacyToken], defaultUsername: defaultUsername)
         }
         throw GitHubTokenStoreError.invalidTokenData
@@ -103,6 +112,11 @@ enum GitHubTokenStore {
 
     private static func readData(using lookup: [String: Any]) throws -> Data? {
         var query = lookup
+        if ProcessInfo.processInfo.arguments.contains("--background-refresh") {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -194,7 +208,7 @@ enum GitHubTokenStore {
     ) -> [GitHubStoredConnection] {
         let values = tokens.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        return values.enumerated().map { index, token in
+        return normalized(values.enumerated().map { index, token in
             GitHubStoredConnection(
                 id: UUID(),
                 owner: index == 0 && !defaultUsername.isEmpty
@@ -206,7 +220,7 @@ enum GitHubTokenStore {
                 privateRepositoryCount: nil,
                 validatedAt: nil
             )
-        }
+        })
     }
 }
 
@@ -300,10 +314,13 @@ enum GitHubRefreshScope: Sendable {
 struct GitHubActivityService: Sendable {
     private let session: URLSession
     private let calendar: Calendar
+    private let branchCacheDefaults: SendableBranchDefaults
 
-    init(session: URLSession = .shared, calendar: Calendar = .autoupdatingCurrent) {
+    init(session: URLSession = .shared, calendar: Calendar = .autoupdatingCurrent,
+         branchCacheDefaults: UserDefaults? = .standard) {
         self.session = session
         self.calendar = calendar
+        self.branchCacheDefaults = SendableBranchDefaults(value: branchCacheDefaults)
     }
 
     func username(token: String) async throws -> String {
@@ -348,26 +365,21 @@ struct GitHubActivityService: Sendable {
     func fetchSnapshots(
         token: String,
         now: Date = .now,
-        scope: GitHubRefreshScope = .allBranches
+        scope: GitHubRefreshScope = .allBranches,
+        existingHistory: DashboardHistory? = nil
     ) async throws -> ActivitySnapshotArchive {
-        try await fetchSnapshots(tokens: [token], now: now, scope: scope)
+        try await fetchSnapshots(tokens: [token], now: now, scope: scope, existingHistory: existingHistory)
     }
 
     func fetchSnapshots(
         tokens: [String],
         now: Date = .now,
-        scope: GitHubRefreshScope = .allBranches
+        scope: GitHubRefreshScope = .allBranches,
+        existingHistory: DashboardHistory? = nil
     ) async throws -> ActivitySnapshotArchive {
         guard !tokens.isEmpty else { throw GitHubActivityError.invalidToken }
 
-        let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start
-            ?? calendar.startOfDay(for: now)
-        let monthStart = calendar.dateInterval(of: .month, for: now)?.start
-            ?? calendar.startOfDay(for: now)
-        let rollingDayStart = now.addingTimeInterval(-24 * 60 * 60)
-        let rollingWeekStart = now.addingTimeInterval(-7 * 24 * 60 * 60)
-        let rollingMonthStart = now.addingTimeInterval(-30 * 24 * 60 * 60)
-        let fetchStart = min(weekStart, rollingWeekStart, monthStart, rollingMonthStart)
+        let fetchStart = snapshotStart(at: now)
         var username: String?
         var authorizedByRepository: [String: AuthorizedRepository] = [:]
 
@@ -394,7 +406,8 @@ struct GitHubActivityService: Sendable {
         let repositories = authorizedByRepository.values.sorted {
             $0.repository.fullName.localizedStandardCompare($1.repository.fullName) == .orderedAscending
         }
-        let cachedBranches = scope == .recentBranches ? GitHubBranchCache.read() : [:]
+        let cachedBranches = scope == .recentBranches
+            ? branchCacheDefaults.value.map { GitHubBranchCache.read(defaults: $0) } ?? [:] : [:]
         let scan = try await commitReferences(
             repositories: repositories,
             username: username,
@@ -403,7 +416,6 @@ struct GitHubActivityService: Sendable {
             scope: scope,
             cachedBranches: cachedBranches
         )
-        GitHubBranchCache.merge(scan.activeBranchesByRepository)
         let uniqueReferences = Dictionary(
             scan.references.map { ($0.id, $0) },
             uniquingKeysWith: { existing, _ in existing }
@@ -415,66 +427,57 @@ struct GitHubActivityService: Sendable {
             }
             return $0.authoredAt < $1.authoredAt
         }
-        let commits = try await commitDetails(references: uniqueReferences)
+        let savedCommits = existingHistory?.username.caseInsensitiveCompare(username) == .orderedSame
+            ? existingHistory?.commits ?? [] : []
+        let commits = try await commitDetails(references: uniqueReferences, cachedCommits: savedCommits)
+        if let defaults = branchCacheDefaults.value {
+            GitHubBranchCache.merge(scan.activeBranchesByRepository, defaults: defaults)
+        }
 
-        let dayStart = calendar.startOfDay(for: now)
-        let dailyCommits = commits.filter { $0.authoredAt >= dayStart && $0.authoredAt <= now }
-        let weeklyCommits = commits.filter { $0.authoredAt >= weekStart && $0.authoredAt <= now }
-        let rollingDailyCommits = commits.filter {
-            $0.authoredAt >= rollingDayStart && $0.authoredAt <= now
+        return snapshots(username: username, commits: commits, now: now)
+    }
+
+    func snapshots(from history: DashboardHistory, now: Date) -> ActivitySnapshotArchive? {
+        let range = DateInterval(start: snapshotStart(at: now), end: now)
+        guard history.catalogUpdatedAt != nil,
+              history.coveredCount(in: range) == history.repositories.count,
+              history.repositories.allSatisfy({ history.coverage[$0.id]?.error == nil }) else { return nil }
+        let repositories = Set(history.repositories.map { $0.id.lowercased() })
+        let commits = history.commits.filter { repositories.contains($0.repository.lowercased()) }.map {
+            CommitActivity(repositoryName: String($0.repository.split(separator: "/").last ?? ""),
+                repositoryFullName: $0.repository, authoredAt: $0.date,
+                additions: $0.additions, deletions: $0.deletions)
         }
-        let rollingWeeklyCommits = commits.filter {
-            $0.authoredAt >= rollingWeekStart && $0.authoredAt <= now
-        }
-        let monthlyCommits = commits.filter { $0.authoredAt >= monthStart && $0.authoredAt <= now }
-        let rollingMonthlyCommits = commits.filter {
-            $0.authoredAt >= rollingMonthStart && $0.authoredAt <= now
+        return snapshots(username: history.username, commits: commits, now: now)
+    }
+
+    private func snapshotStart(at now: Date) -> Date {
+        [StoredActivityPeriod.daily, .weekly, .monthly].flatMap { period in
+            [PeriodWindowMode.fixed, .rolling].map {
+                ActivityBucketLayout.interval(for: period, windowMode: $0, anchor: now, calendar: calendar).start
+            }
+        }.min()!
+    }
+
+    private func snapshots(username: String, commits: [CommitActivity], now: Date) -> ActivitySnapshotArchive {
+        func snapshot(_ period: StoredActivityPeriod, _ mode: PeriodWindowMode) -> ActivitySnapshot {
+            let interval = ActivityBucketLayout.interval(for: period, windowMode: mode, anchor: now, calendar: calendar)
+            let starts = ActivityBucketLayout.starts(for: period, windowMode: mode, anchor: now, calendar: calendar)
+            return self.snapshot(
+                commits: commits.filter { $0.authoredAt >= interval.start && $0.authoredAt <= min(now, interval.end) },
+                bucketStarts: starts,
+                now: now
+            )
         }
 
         return ActivitySnapshotArchive(
             username: username,
-            daily: snapshot(
-                commits: dailyCommits,
-                intervalStart: dayStart,
-                intervalEnd: calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now,
-                cellCount: 12,
-                now: now
-            ),
-            weekly: snapshot(
-                commits: weeklyCommits,
-                intervalStart: weekStart,
-                intervalEnd: calendar.date(byAdding: .day, value: 7, to: weekStart) ?? now,
-                cellCount: 7,
-                now: now
-            ),
-            rollingDaily: snapshot(
-                commits: rollingDailyCommits,
-                intervalStart: rollingDayStart,
-                intervalEnd: now,
-                cellCount: 12,
-                now: now
-            ),
-            rollingWeekly: snapshot(
-                commits: rollingWeeklyCommits,
-                intervalStart: rollingWeekStart,
-                intervalEnd: now,
-                cellCount: 7,
-                now: now
-            ),
-            monthly: snapshot(
-                commits: monthlyCommits,
-                intervalStart: monthStart,
-                intervalEnd: calendar.date(byAdding: .month, value: 1, to: monthStart) ?? now,
-                cellCount: 5,
-                now: now
-            ),
-            rollingMonthly: snapshot(
-                commits: rollingMonthlyCommits,
-                intervalStart: rollingMonthStart,
-                intervalEnd: now,
-                cellCount: 5,
-                now: now
-            ),
+            daily: snapshot(.daily, .fixed),
+            weekly: snapshot(.weekly, .fixed),
+            rollingDaily: snapshot(.daily, .rolling),
+            rollingWeekly: snapshot(.weekly, .rolling),
+            monthly: snapshot(.monthly, .fixed),
+            rollingMonthly: snapshot(.monthly, .rolling),
             savedAt: now
         )
     }
@@ -513,6 +516,7 @@ struct GitHubActivityService: Sendable {
     // Dashboard history is host-only; no credentials enter the returned cache.
     func fetchDashboardHistory(
         tokens: [String], range: DateInterval, existing: DashboardHistory?,
+        incremental: Bool = false,
         progress: @escaping @Sendable (DashboardHistory, String, Int, Int) async -> Void
     ) async throws -> DashboardHistory {
         var username: String?
@@ -536,9 +540,15 @@ struct GitHubActivityService: Sendable {
             DashboardRepository(id: $0.repository.fullName, isPrivate: $0.repository.isPrivate,
                                 isArchived: $0.repository.archived ?? false, pushedAt: $0.repository.pushedAt)
         }
-        let allowed = Set(history.repositories.map(\.id))
-        history.commits.removeAll { !allowed.contains($0.repository) }
-        history.coverage = history.coverage.filter { allowed.contains($0.key) }
+        let canonicalNames = Dictionary(uniqueKeysWithValues: history.repositories.map { ($0.id.lowercased(), $0.id) })
+        history.commits = history.commits.compactMap { commit in
+            guard let name = canonicalNames[commit.repository.lowercased()] else { return nil }
+            return DashboardCommit(repository: name, sha: commit.sha, date: commit.date,
+                                   message: commit.message, additions: commit.additions, deletions: commit.deletions)
+        }
+        history.coverage = Dictionary(history.coverage.compactMap { name, coverage in
+            canonicalNames[name.lowercased()].map { ($0, coverage) }
+        }, uniquingKeysWith: { first, _ in first })
         history.catalogUpdatedAt = .now
         history.asOf = max(history.asOf ?? range.end, range.end)
         await progress(history, "Repository list updated", 0, repositories.count)
@@ -546,6 +556,14 @@ struct GitHubActivityService: Sendable {
             try Task.checkCancellation()
             let repository = authorized.repository
             let name = repository.fullName
+            var repositoryRange = range
+            if incremental, let coverage = history.coverage[name], coverage.error == nil,
+               let covered = coverage.intervals.first(where: { $0.start <= range.start && $0.end > range.start }),
+               let pushedAt = repository.pushedAt, pushedAt <= covered.end {
+                // New pushes may expose old commits; only unchanged repos can use a short overlap.
+                let overlapStart = calendar.date(byAdding: .day, value: -1, to: min(covered.end, range.end))!
+                repositoryRange = DateInterval(start: max(range.start, overlapStart), end: range.end)
+            }
             await progress(history, "Syncing \(name)", index, repositories.count)
             do {
                 let scan: RepositoryCommitScan
@@ -554,7 +572,7 @@ struct GitHubActivityService: Sendable {
                     scan = RepositoryCommitScan(repositoryFullName: name, references: [], activeBranches: [])
                 } else {
                     scan = try await commitReferences(repository: repository, username: username,
-                        since: range.start, until: range.end, token: authorized.token,
+                        since: repositoryRange.start, until: repositoryRange.end, token: authorized.token,
                         scope: .allBranches, cachedBranches: [:])
                 }
                 let references = Dictionary(scan.references.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }).values
@@ -563,23 +581,27 @@ struct GitHubActivityService: Sendable {
                 var checkpointCount = 0
                 for batch in Array(references).batches(of: 8) {
                     try Task.checkCancellation()
-                    let fetched = try await withThrowingTaskGroup(of: DashboardCommit.self) { group in
+                    let outcomes = await withTaskGroup(of: Result<DashboardCommit, Error>.self) { group in
                         for reference in batch {
                             group.addTask {
-                                if let saved = cached[reference.id] { return saved }
-                                let detail: CommitDetailResponse = try await get(
-                                    path: "/repos/\(name)/commits/\(reference.sha)", token: authorized.token)
-                                return DashboardCommit(repository: name, sha: reference.sha, date: reference.authoredAt,
-                                    message: detail.commit?.message?.components(separatedBy: .newlines).first ?? String(reference.sha.prefix(7)),
-                                    additions: detail.stats.additions, deletions: detail.stats.deletions)
+                                do {
+                                    if let saved = cached[reference.id] { return .success(saved) }
+                                    let detail: CommitDetailResponse = try await get(
+                                        path: "/repos/\(name)/commits/\(reference.sha)", token: authorized.token)
+                                    return .success(DashboardCommit(repository: name, sha: reference.sha, date: reference.authoredAt,
+                                        message: detail.commit?.message?.components(separatedBy: .newlines).first ?? String(reference.sha.prefix(7)),
+                                        additions: detail.stats.additions, deletions: detail.stats.deletions))
+                                } catch { return .failure(error) }
                             }
                         }
-                        var result: [DashboardCommit] = []
-                        for try await commit in group { result.append(commit) }
+                        var result: [Result<DashboardCommit, Error>] = []
+                        for await outcome in group { result.append(outcome) }
                         return result
                     }
+                    let fetched = outcomes.compactMap { try? $0.get() }
                     commits.append(contentsOf: fetched)
-                    // Keep successful detail requests across cancellation or rate limits.
+                    // Keep successful detail requests even when another request in the
+                    // same batch fails. The next sync can reuse their immutable stats.
                     // Coverage is recorded only after every branch/detail has succeeded.
                     let newValues = fetched.filter { cached[$0.id] == nil }
                     history.commits.append(contentsOf: newValues)
@@ -588,9 +610,21 @@ struct GitHubActivityService: Sendable {
                         checkpointCount = 0
                         await progress(history, "Syncing \(name) · \(commits.count)/\(references.count) commits", index, repositories.count)
                     }
+                    let errors = outcomes.compactMap { outcome -> Error? in
+                        if case .failure(let error) = outcome { return error }
+                        return nil
+                    }
+                    if let error = errors.first(where: {
+                        if case GitHubActivityError.rateLimited = $0 { return true }
+                        if case GitHubActivityError.invalidToken = $0 { return true }
+                        return $0 is CancellationError
+                    }) ?? errors.first {
+                        throw error
+                    }
                 }
-                history.replaceCommits(for: name, in: range, with: commits.filter { $0.date >= range.start && $0.date < range.end })
-                history.coverage[name, default: DashboardCoverage()].record(range, at: .now)
+                history.replaceCommits(for: name, in: repositoryRange,
+                    with: commits.filter { $0.date >= repositoryRange.start && $0.date < repositoryRange.end })
+                history.coverage[name, default: DashboardCoverage()].record(repositoryRange, at: .now)
             } catch is CancellationError { throw CancellationError() }
             catch {
                 history.coverage[name, default: DashboardCoverage()].error = error.localizedDescription
@@ -753,7 +787,10 @@ struct GitHubActivityService: Sendable {
                                     token: token
                                 )
                             )
-                        } catch GitHubActivityError.notFound {
+                        } catch GitHubActivityError.notFound where scope == .recentBranches && branch != repository.defaultBranch {
+                            // A cached branch can disappear between refreshes. A 404
+                            // on the current default or a freshly listed branch can
+                            // instead mean missing Contents access; never call it zero activity.
                             return BranchCommitScan(branch: branch, references: [])
                         }
                     }
@@ -849,10 +886,9 @@ struct GitHubActivityService: Sendable {
         return references
     }
 
-    private func commitDetails(references: [CommitReference]) async throws -> [CommitActivity] {
+    private func commitDetails(references: [CommitReference], cachedCommits: [DashboardCommit]) async throws -> [CommitActivity] {
         var activities: [CommitActivity] = []
-        let saved = (try? DashboardHistoryStore.read())?.commits ?? []
-        let cached = Dictionary(saved.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let cached = Dictionary(cachedCommits.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         for batch in references.batches(of: 8) {
             let values = try await withThrowingTaskGroup(of: CommitActivity.self) { group in
@@ -891,9 +927,7 @@ struct GitHubActivityService: Sendable {
 
     private func snapshot(
         commits: [CommitActivity],
-        intervalStart: Date,
-        intervalEnd: Date,
-        cellCount: Int,
+        bucketStarts: [Date],
         now: Date
     ) -> ActivitySnapshot {
         let groupedByName = Dictionary(grouping: commits, by: \CommitActivity.repositoryName)
@@ -901,8 +935,7 @@ struct GitHubActivityService: Sendable {
             Set(values.map(\CommitActivity.repositoryFullName)).count > 1 ? name : nil
         })
         var repositoryTotals: [String: RepositoryAccumulator] = [:]
-        var cells = Array(repeating: CellAccumulator(), count: cellCount)
-        let intervalDuration = max(intervalEnd.timeIntervalSince(intervalStart), 1)
+        var cells = Array(repeating: CellAccumulator(), count: bucketStarts.count)
 
         for commit in commits {
             let displayName = duplicateNames.contains(commit.repositoryName)
@@ -910,8 +943,7 @@ struct GitHubActivityService: Sendable {
                 : commit.repositoryName
             repositoryTotals[displayName, default: RepositoryAccumulator()].add(commit)
 
-            let progress = commit.authoredAt.timeIntervalSince(intervalStart) / intervalDuration
-            let index = min(max(Int(progress * Double(cellCount)), 0), cellCount - 1)
+            let index = bucketStarts.lastIndex { $0 <= commit.authoredAt } ?? 0
             cells[index].additions += commit.additions
             cells[index].deletions += commit.deletions
         }
@@ -945,6 +977,7 @@ struct GitHubActivityService: Sendable {
         query: [URLQueryItem] = [],
         token: String
     ) async throws -> Response {
+        try Task.checkCancellation()
         var components = URLComponents()
         components.scheme = "https"
         components.host = "api.github.com"
@@ -959,6 +992,7 @@ struct GitHubActivityService: Sendable {
         request.setValue("gitlines/1.0", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await session.data(for: request)
+        try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else {
             throw GitHubActivityError.invalidResponse
         }
@@ -968,11 +1002,20 @@ struct GitHubActivityService: Sendable {
             return try Self.decoder.decode(Response.self, from: data)
         case 401:
             throw GitHubActivityError.invalidToken
-        case 403:
-            if http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0" {
-                let resetAt = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
+        case 403, 429:
+            let body = try? Self.decoder.decode(APIErrorResponse.self, from: data)
+            let primaryLimit = http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
+            if http.statusCode == 429 || primaryLimit
+                || body?.message.lowercased().contains("secondary rate limit") == true
+                || http.value(forHTTPHeaderField: "Retry-After") != nil {
+                let retryAt = http.value(forHTTPHeaderField: "Retry-After")
+                    .flatMap(TimeInterval.init)
+                    .map { Date().addingTimeInterval(max(0, $0)) }
+                let primaryResetAt = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
                     .flatMap(TimeInterval.init)
                     .map(Date.init(timeIntervalSince1970:))
+                let resetAt = retryAt ?? (primaryLimit ? primaryResetAt : nil)
+                    ?? Date().addingTimeInterval(60)
                 throw GitHubActivityError.rateLimited(resetAt)
             }
             throw GitHubActivityError.accessDenied
@@ -1008,6 +1051,12 @@ struct GitHubActivityService: Sendable {
         }
         return decoder
     }()
+}
+
+// Foundation documents UserDefaults reads/writes as thread-safe, but the SDK
+// does not declare it Sendable. Keep the exception scoped to that dependency.
+private struct SendableBranchDefaults: @unchecked Sendable {
+    let value: UserDefaults?
 }
 
 private struct UserResponse: Decodable, Sendable {
@@ -1140,9 +1189,9 @@ private struct GitHubBranchCacheArchive: Codable {
 enum GitHubBranchCache {
     private static let key = "github.recentActivityBranches"
 
-    static func read() -> [String: Set<String>] {
+    static func read(defaults: UserDefaults = .standard) -> [String: Set<String>] {
         guard
-            let data = UserDefaults.standard.data(forKey: key),
+            let data = defaults.data(forKey: key),
             let archive = try? JSONDecoder().decode(GitHubBranchCacheArchive.self, from: data),
             archive.schemaVersion == GitHubBranchCacheArchive.currentSchemaVersion
         else {
@@ -1152,10 +1201,10 @@ enum GitHubBranchCache {
         return archive.branchesByRepository.mapValues(Set.init)
     }
 
-    static func merge(_ discovered: [String: Set<String>]) {
+    static func merge(_ discovered: [String: Set<String>], defaults: UserDefaults = .standard) {
         guard !discovered.isEmpty else { return }
 
-        var cached = read()
+        var cached = read(defaults: defaults)
         for (repository, branches) in discovered {
             cached[repository, default: []].formUnion(branches)
         }
@@ -1164,11 +1213,11 @@ enum GitHubBranchCache {
             branchesByRepository: cached.mapValues { $0.sorted() }
         )
         guard let data = try? JSONEncoder().encode(archive) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
     }
 
-    static func remove() {
-        UserDefaults.standard.removeObject(forKey: key)
+    static func remove(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 }
 

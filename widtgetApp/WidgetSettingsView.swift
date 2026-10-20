@@ -28,8 +28,8 @@ private enum HostSection: String, CaseIterable, Identifiable {
 }
 
 struct WidgetSettingsView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var github = GitHubAccountModel()
+    @ObservedObject var github: GitHubAccountModel
+    @StateObject private var backgroundRefresh = GitHubBackgroundRefresh()
     @State private var showingDisconnectConfirmation = false
     @State private var showingRemoveOrganizationConfirmation = false
     @State private var organizationPendingRemoval: GitHubConnectionSummary?
@@ -130,11 +130,6 @@ struct WidgetSettingsView: View {
         .task {
             migrateToFixedDefaultIfNeeded()
             reloadWidgets()
-            await github.bootstrap()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            Task { await github.handleActivation() }
         }
         .onChange(of: paneOrder) { _, _ in
             saveWidgetStudio()
@@ -895,14 +890,27 @@ struct WidgetSettingsView: View {
     private var refreshIntervalSection: some View {
         GroupBox("Widget refresh") {
             VStack(alignment: .leading, spacing: 10) {
-                Picker("How often widgets reload", selection: $refreshInterval) {
+                Picker("How often Gitlines refreshes", selection: $refreshInterval) {
                     ForEach(WidgetRefreshInterval.allCases) { interval in
                         Text(interval.displayName).tag(interval)
                     }
                 }
                 .pickerStyle(.menu)
 
-                Text("Applies to every Gitlines widget. Automatic uses a system-tuned default; macOS still meters refreshes against the daily budget, so very short intervals are not guaranteed.")
+                Toggle("Refresh widgets when Gitlines is closed", isOn: Binding(
+                    get: { backgroundRefresh.isRegistered },
+                    set: { backgroundRefresh.setEnabled($0) }
+                ))
+
+                if backgroundRefresh.status == .requiresApproval {
+                    Text("Allow Gitlines in System Settings → General → Login Items & Extensions to enable background refresh.")
+                    Button("Open Login Items Settings") { backgroundRefresh.openSettings() }
+                }
+                if let error = backgroundRefresh.errorMessage {
+                    Text(error).foregroundStyle(.red)
+                }
+
+                Text("Automatic refreshes every 30 minutes. Background refresh works after quitting Gitlines and resumes after login. Your Mac must be awake and online; macOS controls widget redraw timing.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -913,6 +921,9 @@ struct WidgetSettingsView: View {
         .onChange(of: refreshInterval) { _, newValue in
             SharedPreferences.refreshInterval = newValue
             reloadWidgets()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            backgroundRefresh.updateStatus()
         }
     }
 
@@ -1480,5 +1491,5 @@ private extension WidgetPane {
 }
 
 #Preview {
-    WidgetSettingsView()
+    WidgetSettingsView(github: GitHubAccountModel())
 }

@@ -112,7 +112,12 @@ enum ActivityDataSource {
     static func content(for period: ActivityPeriod, windowMode: PeriodWindowMode) -> ActivityContent {
         do {
             guard let archive = try ActivitySnapshotStore.read() else {
-                return ActivityContent(username: "", snapshot: .setupRequired)
+                return ActivityContent(username: "", snapshot: .empty(for: period.storedPeriod, state: .setupRequired))
+            }
+            let username = SharedPreferences.defaults.string(forKey: SharedPreferences.Key.githubUsername) ?? ""
+            guard !username.isEmpty,
+                  archive.username.caseInsensitiveCompare(username) == .orderedSame else {
+                return ActivityContent(username: username, snapshot: .empty(for: period.storedPeriod, state: .setupRequired))
             }
             return ActivityContent(
                 username: archive.username,
@@ -127,13 +132,8 @@ enum ActivityDataSource {
                 username: SharedPreferences.defaults.string(
                     forKey: SharedPreferences.Key.githubUsername
                 ) ?? "",
-                snapshot: ActivitySnapshot(
-                    additions: 0,
-                    deletions: 0,
-                    commits: 0,
-                    repositories: [],
-                    activity: (0..<7).map { ActivityCell(id: $0, additions: 0, deletions: 0) },
-                    updatedAt: .now,
+                snapshot: .empty(
+                    for: period.storedPeriod,
                     state: .error,
                     errorMessage: "Open Gitlines · \(nsError.code)"
                 )

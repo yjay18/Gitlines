@@ -2,7 +2,7 @@
 set -euo pipefail
 repo_root="${0:A:h:h}"
 mkdir -p "$repo_root/.build/tests"
-xcrun swiftc -parse-as-library \
+xcrun swiftc -parse-as-library -module-cache-path "$repo_root/.build/tests/ModuleCache" \
  "$repo_root/Shared/WidgetPreferences.swift" "$repo_root/Shared/ActivitySnapshotStore.swift" \
  "$repo_root/widtget/Models/ActivityModels.swift" "$repo_root/widtgetApp/GitHubSignInService.swift" \
  "$repo_root/widtgetApp/DashboardHistory.swift" "$repo_root/widtgetApp/GitHubActivityService.swift" \

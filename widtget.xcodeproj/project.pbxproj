@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000029 /* GitHubBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000029 /* GitHubBackgroundRefresh.swift */; };
+		A1000000000000000000002A /* com.yjay18.widtget.refresh.plist in Copy Launch Agents */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002A /* com.yjay18.widtget.refresh.plist */; };
 		A20000000000000000000001 /* WidtgetConfigurationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* WidtgetConfigurationIntent.swift */; };
 		A20000000000000000000002 /* ActivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* ActivityProvider.swift */; };
 		A20000000000000000000003 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* Palette.swift */; };
@@ -68,6 +70,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		C10000000000000000000008 /* Copy Launch Agents */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchAgents;
+			dstSubfolderSpec = 1;
+			files = (
+				A1000000000000000000002A /* com.yjay18.widtget.refresh.plist in Copy Launch Agents */,
+			);
+			name = "Copy Launch Agents";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
 		C10000000000000000000007 /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -82,6 +96,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B10000000000000000000029 /* GitHubBackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubBackgroundRefresh.swift; sourceTree = "<group>"; };
+		B1000000000000000000002A /* com.yjay18.widtget.refresh.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = com.yjay18.widtget.refresh.plist; sourceTree = "<group>"; };
 		B10000000000000000000001 /* ActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityModels.swift; sourceTree = "<group>"; };
 		B10000000000000000000002 /* WidtgetConfigurationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidtgetConfigurationIntent.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* ActivityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityProvider.swift; sourceTree = "<group>"; };
@@ -250,6 +266,8 @@
 				B10000000000000000000023 /* ThemePalette.swift */,
 				B1000000000000000000001B /* DashboardAnalytics.swift */,
 				B10000000000000000000019 /* GitHubAccountModel.swift */,
+				B10000000000000000000029 /* GitHubBackgroundRefresh.swift */,
+				B1000000000000000000002A /* com.yjay18.widtget.refresh.plist */,
 				B10000000000000000000018 /* GitHubActivityService.swift */,
 				B10000000000000000000025 /* GitHubSignInService.swift */,
 				B10000000000000000000027 /* RepositoryDashboardView.swift */,
@@ -288,6 +306,7 @@
 				C10000000000000000000005 /* Frameworks */,
 				C10000000000000000000006 /* Resources */,
 				C10000000000000000000007 /* Embed App Extensions */,
+				C10000000000000000000008 /* Copy Launch Agents */,
 			);
 			buildRules = (
 			);
@@ -412,6 +431,7 @@
 				A10000000000000000000015 /* ActivityModels.swift in Sources */,
 				A10000000000000000000017 /* ActivitySnapshotStore.swift in Sources */,
 				A10000000000000000000019 /* GitHubAccountModel.swift in Sources */,
+				A10000000000000000000029 /* GitHubBackgroundRefresh.swift in Sources */,
 				A1000000000000000000001B /* DashboardAnalytics.swift in Sources */,
 				A1000000000000000000001C /* AnalyticsDashboardView.swift in Sources */,
 				A10000000000000000000023 /* ThemePalette.swift in Sources */,

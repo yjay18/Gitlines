@@ -3,7 +3,7 @@
 ## Product boundary
 
 - `Gitlines` is a native macOS WidgetKit product with a deliberately small host app.
-- Keep the widget as the primary product. The host app only manages shared widget preferences and credentials/data refresh when live GitHub data is added.
+- Keep the widget as the primary product. The host app manages shared widget preferences, GitHub credentials/data refresh, and its existing local activity dashboard.
 - The public product and app name is `Gitlines`. The existing `widtget` project, schemes, target names, bundle identifiers, App Group, Keychain service, and refresh URL scheme are compatibility identifiers; do not rename them without an explicit migration plan.
 - Preserve the dark, number-first visual hierarchy and native Daily/Weekly/Monthly App Intent configuration. The widget period pill cycles daily → weekly → monthly; monthly activity is bucketed week by week (five cells, labelled W1–W5) and its peak/active/average analytics read from those week cells. Every theme renders periods through the shared `ActivityIntervalLabels`, so new periods flow to all themes and sizes automatically.
 
@@ -40,10 +40,14 @@ The signed run is required for macOS to register the embedded widget extension c
 
 ## Architecture
 
-- `widtgetApp/`: minimal SwiftUI host and shared appearance controls.
+- `widtgetApp/`: SwiftUI host, appearance controls, GitHub connection management, and local repository activity dashboard.
 - `widtget/`: WidgetKit extension, App Intent configuration, timeline provider, models, and size-specific views.
 - `Shared/WidgetPreferences.swift`: App Group preferences shared by both targets.
-- `widtget/Provider/ActivityProvider.swift`: current fixture data and the integration seam for live GitHub activity.
+- `Shared/ActivitySnapshotStore.swift`: atomic display-ready widget snapshots in the App Group container.
+- `widtgetApp/GitHubSignInService.swift`: device authorization and token renewal; `GitHubActivityService.swift`: read-only repository activity API client; `GitHubAccountModel.swift`: connection and refresh orchestration, with credentials stored only in the host Keychain.
+- `widtgetApp/GitHubBackgroundRefresh.swift`: SMAppService launch-agent registration and a cross-process host sync lease. The signed host supports `--background-refresh` for a windowless, one-shot sync after the main app quits. Preserve host-only credential access and do not register temporary validation builds.
+- `widtgetApp/DashboardHistory.swift`: host-only repository metadata and commit history in Application Support, separate from widget snapshots.
+- `widtget/Provider/ActivityProvider.swift`: cache-only widget reader and timeline provider. Fixtures serve Xcode previews and the labelled disconnected host sample state; a widget without a cache requests setup.
 
 ## Widget themes
 
@@ -74,8 +78,9 @@ Two families of theme live side by side:
    and give it a base colour in `WidgetVisualTheme.containerBackgroundColor`
    (`widtget/Views/ThemeMetrics.swift`) so the widget's bleed area matches.
 4. Register the new file in `widtget.xcodeproj/project.pbxproj` (the project is not
-   file-system-synchronized): add a `PBXFileReference` (`B1…`), a `PBXBuildFile` (`A1…`),
-   a child in the `Views` group, and an entry in the widget target's `Sources` phase.
+   file-system-synchronized): add a `PBXFileReference` (`B1…`), build-file references
+   for both targets (`A1…`/`A2…`), a child in the `Views` group, and entries in both
+   targets' `Sources` phases. The host compiles the same views for Widget Studio.
 5. The host theme picker (`WidgetSettingsView`) iterates `WidgetVisualTheme.allCases`, so
    it adopts the case automatically; only Blockwork shows the composer, every other theme
    shows the fixed-layout overview.
@@ -108,11 +113,12 @@ recompute per theme.
 
 Mockups of all four (small + medium) live in the project's design board artifact.
 
-When adding live GitHub data, store credentials in Keychain from the host app, fetch there, write only display-ready snapshots into the App Group container, and reload WidgetKit timelines. Never place a token in source, plist files, UserDefaults, or widget timeline entries.
+Live GitHub data stays behind the host boundary: store credentials in Keychain, fetch from the host, write only display-ready snapshots into the App Group container, and reload WidgetKit timelines. Never place a token in source, plist files, UserDefaults, or widget timeline entries.
 
 ## Validation
 
 - Run the smallest relevant check first; at minimum, run `./script/build_and_run.sh build` after Swift or project changes.
+- Run `./script/test.sh` for offline history, API, sign-in, and account operation regressions.
 - Use Xcode previews to inspect all supported widget families when layout changes.
 - Preserve user-authored signing/project changes and unrelated worktree changes.
 - Do not add commit co-author trailers.

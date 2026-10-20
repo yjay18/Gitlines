@@ -1,5 +1,73 @@
 import Foundation
 
+// One bucket definition for the host's aggregation and every widget's labels.
+// Calendar windows follow local clock/day boundaries; rolling windows cover an
+// exact elapsed duration. Months always expose five seven-day cells (W1–W5),
+// with the fifth cell holding the remainder, or staying empty in a 28-day month.
+enum ActivityBucketLayout {
+    static func cellCount(for period: StoredActivityPeriod) -> Int {
+        switch period {
+        case .daily: 12
+        case .weekly: 7
+        case .monthly: 5
+        }
+    }
+
+    static func interval(
+        for period: StoredActivityPeriod,
+        windowMode: PeriodWindowMode,
+        anchor: Date,
+        calendar: Calendar = .current
+    ) -> DateInterval {
+        if windowMode == .rolling {
+            let days: Int
+            switch period {
+            case .daily: days = 1
+            case .weekly: days = 7
+            case .monthly: days = 30
+            }
+            return DateInterval(start: anchor.addingTimeInterval(-Double(days) * 86_400), end: anchor)
+        }
+
+        let component: Calendar.Component
+        switch period {
+        case .daily: component = .day
+        case .weekly: component = .weekOfYear
+        case .monthly: component = .month
+        }
+        if let interval = calendar.dateInterval(of: component, for: anchor) { return interval }
+
+        let start = calendar.startOfDay(for: anchor)
+        let days = period == .daily ? 1 : (period == .weekly ? 7 : 30)
+        let end = calendar.date(byAdding: .day, value: days, to: start)
+            ?? start.addingTimeInterval(Double(days) * 86_400)
+        return DateInterval(start: start, end: end)
+    }
+
+    static func starts(
+        for period: StoredActivityPeriod,
+        windowMode: PeriodWindowMode,
+        anchor: Date,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        let start = interval(for: period, windowMode: windowMode, anchor: anchor, calendar: calendar).start
+        let count = cellCount(for: period)
+        return (0..<count).map { index in
+            if windowMode == .rolling {
+                let seconds = period == .daily ? 7_200 : (period == .weekly ? 86_400 : 7 * 86_400)
+                return start.addingTimeInterval(Double(index * seconds))
+            }
+            if period == .daily {
+                return calendar.date(bySettingHour: index * 2, minute: 0, second: 0, of: start)
+                    ?? start.addingTimeInterval(Double(index) * 7_200)
+            }
+            let days = period == .weekly ? index : index * 7
+            return calendar.date(byAdding: .day, value: days, to: start)
+                ?? start.addingTimeInterval(Double(days) * 86_400)
+        }
+    }
+}
+
 enum ActivityLoadState: String, Codable, Sendable {
     case setupRequired
     case loading
@@ -35,6 +103,21 @@ struct ActivitySnapshot: Hashable, Codable, Sendable {
     let updatedAt: Date
     let state: ActivityLoadState
     let errorMessage: String?
+
+    static func empty(
+        for period: StoredActivityPeriod,
+        state: ActivityLoadState,
+        updatedAt: Date = .now,
+        errorMessage: String? = nil
+    ) -> ActivitySnapshot {
+        ActivitySnapshot(
+            additions: 0, deletions: 0, commits: 0, repositories: [],
+            activity: (0..<ActivityBucketLayout.cellCount(for: period)).map {
+                ActivityCell(id: $0, additions: 0, deletions: 0)
+            },
+            updatedAt: updatedAt, state: state, errorMessage: errorMessage
+        )
+    }
 
     init(
         additions: Int,

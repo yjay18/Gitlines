@@ -16,68 +16,37 @@ enum ActivityIntervalLabels {
     ) -> [String] {
         guard cellCount > 0 else { return [] }
 
-        let interval = interval(
-            period: period,
+        let interval = ActivityBucketLayout.interval(
+            for: period.storedPeriod,
             windowMode: windowMode,
-            referenceDate: referenceDate,
+            anchor: referenceDate,
+            calendar: calendar
+        )
+        let bucketStarts = ActivityBucketLayout.starts(
+            for: period.storedPeriod,
+            windowMode: windowMode,
+            anchor: referenceDate,
             calendar: calendar
         )
         let cellDuration = interval.duration / Double(cellCount)
 
         return (0..<cellCount).map { index in
-            let start = interval.start.addingTimeInterval(cellDuration * Double(index))
-            let end = interval.start.addingTimeInterval(cellDuration * Double(index + 1))
+            // Older archives and preview fixtures can use a different cell count;
+            // retain their original even subdivision until the next host refresh.
+            let aligned = bucketStarts.count == cellCount
+            let start = aligned ? bucketStarts[index]
+                : interval.start.addingTimeInterval(cellDuration * Double(index))
+            let end = aligned ? (index + 1 < cellCount ? bucketStarts[index + 1] : interval.end)
+                : interval.start.addingTimeInterval(cellDuration * Double(index + 1))
 
             switch period {
             case .daily:
                 return hourLabel(start: start, end: end, style: style, calendar: calendar)
             case .weekly:
-                return weekdayLabel(start, style: style)
+                return weekdayLabel(start, style: style, calendar: calendar)
             case .monthly:
                 return weekLabel(index: index, style: style)
             }
-        }
-    }
-
-    private static func interval(
-        period: ActivityPeriod,
-        windowMode: PeriodWindowMode,
-        referenceDate: Date,
-        calendar: Calendar
-    ) -> DateInterval {
-        switch (period, windowMode) {
-        case (.daily, .fixed):
-            let start = calendar.startOfDay(for: referenceDate)
-            let end = calendar.date(byAdding: .day, value: 1, to: start)
-                ?? start.addingTimeInterval(24 * 60 * 60)
-            return DateInterval(start: start, end: end)
-        case (.weekly, .fixed):
-            let start = calendar.dateInterval(of: .weekOfYear, for: referenceDate)?.start
-                ?? calendar.startOfDay(for: referenceDate)
-            let end = calendar.date(byAdding: .day, value: 7, to: start)
-                ?? start.addingTimeInterval(7 * 24 * 60 * 60)
-            return DateInterval(start: start, end: end)
-        case (.daily, .rolling):
-            return DateInterval(
-                start: referenceDate.addingTimeInterval(-24 * 60 * 60),
-                end: referenceDate
-            )
-        case (.weekly, .rolling):
-            return DateInterval(
-                start: referenceDate.addingTimeInterval(-7 * 24 * 60 * 60),
-                end: referenceDate
-            )
-        case (.monthly, .fixed):
-            let start = calendar.dateInterval(of: .month, for: referenceDate)?.start
-                ?? calendar.startOfDay(for: referenceDate)
-            let end = calendar.date(byAdding: .month, value: 1, to: start)
-                ?? start.addingTimeInterval(30 * 24 * 60 * 60)
-            return DateInterval(start: start, end: end)
-        case (.monthly, .rolling):
-            return DateInterval(
-                start: referenceDate.addingTimeInterval(-30 * 24 * 60 * 60),
-                end: referenceDate
-            )
         }
     }
 
@@ -98,13 +67,17 @@ enum ActivityIntervalLabels {
         return "\(startText)–\(endText)"
     }
 
-    private static func weekdayLabel(_ date: Date, style: ActivityIntervalLabelStyle) -> String {
-        switch style {
-        case .expanded:
-            date.formatted(.dateTime.weekday(.abbreviated))
-        case .compact:
-            date.formatted(.dateTime.weekday(.narrow))
-        }
+    private static func weekdayLabel(
+        _ date: Date,
+        style: ActivityIntervalLabelStyle,
+        calendar: Calendar
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = calendar.locale ?? .current
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate(style == .expanded ? "EEE" : "EEEEE")
+        return formatter.string(from: date)
     }
 
     private static func weekLabel(index: Int, style: ActivityIntervalLabelStyle) -> String {

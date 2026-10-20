@@ -26,6 +26,11 @@ struct DashboardHistoryTests {
         let custom = range(.custom)
         check(custom.current.duration == 4 * 86400, "Custom end day is inclusive")
         check(custom.previous.end == custom.current.start, "Custom comparison immediately precedes range")
+        let clipped = DashboardDateRange.make(unit: .custom, rolling: false, anchor: now, now: now,
+            customStart: date("2026-09-08T12:00:00Z"), customEnd: date("2027-09-08T12:00:00Z"), calendar: calendar)
+        check(clipped.current.end == now, "Future custom end clips to available time")
+        check(clipped.previous.start == date("2026-09-04T23:00:00Z"), "Comparison uses the clipped three-day window")
+        check(clipped.current.duration == clipped.previous.duration, "Clipped custom comparison retains equivalent elapsed time")
         check(range(.weekly, rolling: true).current.duration == 7 * 86400, "Rolling week")
         let dst = DashboardDateRange.make(unit: .daily, rolling: false, anchor: date("2026-03-29T12:00:00Z"), now: now,
                                          customStart: now, customEnd: now, calendar: calendar)
@@ -58,9 +63,16 @@ struct DashboardHistoryTests {
         check(history.commits.count == 3, "Deduplicate branches without collapsing matching SHAs across repos")
         check(history.commits(in: a).count == 2, "End boundary is exclusive")
         check(history.commits(in: a, repositories: ["b/shared"]).count == 1, "Repository selection matches full owner/name")
+        check(history.commits(in: a, repositories: ["B/SHARED"]).count == 1, "Repository selection ignores GitHub name casing")
+        let daily = history.dailyCommitCounts(in: a, repositories: ["A/SHARED"], calendar: calendar)
+        check(daily == [calendar.startOfDay(for: now): 1], "Daily counts respect selected repositories and the exclusive range end")
+        check(history.dailyCommitCounts(in: DateInterval(start: now + 1, duration: 98), calendar: calendar).isEmpty,
+              "Daily counts exclude cached commits outside the visible window")
         history.replaceCommits(for: "a/shared", in: a, with: [])
         check(!history.commits.contains { $0.id == one.id }, "Resync removes commits no longer reachable in that window")
         check(history.commits.contains { $0.id == after.id }, "Resync preserves out-of-window history")
+        history.replaceCommits(for: "B/Shared", in: a, with: [])
+        check(!history.commits.contains { $0.id == sameSHAOtherRepo.id }, "Canonical name case changes do not leave stale commits")
         let data = try JSONEncoder().encode(history)
         let decoded = try JSONDecoder().decode(DashboardHistory.self, from: data)
         check(decoded.commits == history.commits, "History cache round trip")

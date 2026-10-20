@@ -25,7 +25,6 @@ struct RepositoryDashboardView: View {
     @State private var metric = "Commits"
     @State private var detail: DashboardRepository?
     @State private var selectedDay: Date?
-    @State private var attemptedInitialSync = false
     @AppStorage("dashboard.favouriteRepositories") private var favouriteJSON = "[]"
 
     private var isSample: Bool { !github.hasStoredToken }
@@ -33,7 +32,7 @@ struct RepositoryDashboardView: View {
         github.dashboardHistory ?? (isSample ? .sample : DashboardHistory(username: github.username))
     }
     private var unit: DashboardRangeUnit { custom ? .custom : DashboardRangeUnit(rawValue: period.rawValue) ?? .weekly }
-    private var now: Date { history.asOf ?? .now }
+    private var now: Date { isSample ? history.asOf ?? github.currentDate : github.currentDate }
     private var range: DashboardDateRange {
         DashboardDateRange.make(unit: unit, rolling: windowMode == .rolling, anchor: isPresent ? now : anchor, now: now,
                                 customStart: customStart, customEnd: customEnd)
@@ -82,19 +81,14 @@ struct RepositoryDashboardView: View {
                 header
                 dateControls
                 coverageCard
-                if github.hasStoredToken || isSample {
-                    scopeControls
-                    Picker("Dashboard view", selection: $tab) {
-                        ForEach(["Overview", "Repositories", "Activity"], id: \.self) { Text($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    if tab == "Overview" { overview }
-                    if tab == "Repositories" { repositoryExplorer }
-                    if tab == "Activity" { activityExplorer }
-                } else {
-                    Text("Connect GitHub to explore your repositories and activity.")
-                    Button("Open Connections", action: openConnections).buttonStyle(.borderedProminent)
+                scopeControls
+                Picker("Dashboard view", selection: $tab) {
+                    ForEach(["Overview", "Repositories", "Activity"], id: \.self) { Text($0) }
                 }
+                .pickerStyle(.segmented)
+                if tab == "Overview" { overview }
+                if tab == "Repositories" { repositoryExplorer }
+                if tab == "Activity" { activityExplorer }
             }
             .padding(24)
         }
@@ -106,10 +100,8 @@ struct RepositoryDashboardView: View {
             RepositoryDetailView(repository: repository, history: history, range: range.current)
                 .environment(\.themePalette, palette)
         }
-        .task { startInitialSyncIfReady() }
-        .onChange(of: github.hasStoredToken) { _, connected in if connected { startInitialSyncIfReady() } }
-        .onChange(of: github.isBusy) { _, busy in if !busy { startInitialSyncIfReady() } }
         .onChange(of: history.repositories.map(\.id)) { _, ids in selected.formIntersection(ids) }
+        .onChange(of: range.current) { _, _ in selectedDay = nil }
     }
 
     private var header: some View {
@@ -200,7 +192,7 @@ struct RepositoryDashboardView: View {
                 Button(isSample ? "Connect GitHub" : "Manage access", action: openConnections)
             }
             if let updated = history.catalogUpdatedAt {
-                Text("Repository list updated \(updated, style: .relative) ago. Activity through \(now.formatted(date: .abbreviated, time: .shortened)).")
+                Text("Repository list updated \(updated, style: .relative) ago. History window through \((history.asOf ?? updated).formatted(date: .abbreviated, time: .shortened)).")
                     .foregroundStyle(palette.muted)
             }
             if !covered {
@@ -233,7 +225,8 @@ struct RepositoryDashboardView: View {
     }
 
     private var overview: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        let totals = totalsByRepository
+        return VStack(alignment: .leading, spacing: 18) {
             if !covered, values.isEmpty, !custom, isPresent, selected.isEmpty, let archive = github.activityArchive {
                 savedSnapshotSummary(archive)
             } else {
@@ -249,8 +242,11 @@ struct RepositoryDashboardView: View {
             Text("Select repositories in the explorer to compare their activity and see combined totals.")
                 .foregroundStyle(palette.muted)
             ForEach(history.repositories.filter { selected.isEmpty || selected.contains($0.id) }
-                .sorted { (totalsByRepository[$0.id]?.commits ?? 0) > (totalsByRepository[$1.id]?.commits ?? 0) }.prefix(5)) { repo in
-                repositoryRow(repo)
+                .sorted {
+                    let lhs = totals[$0.id]?.commits ?? 0, rhs = totals[$1.id]?.commits ?? 0
+                    return lhs == rhs ? $0.id < $1.id : lhs > rhs
+                }.prefix(5)) { repo in
+                repositoryRow(repo, totals: totals[repo.id] ?? DashboardTotals([]))
             }
             activityExplorer
         }
@@ -274,16 +270,18 @@ struct RepositoryDashboardView: View {
     }
 
     private var comparisonTable: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let repositoryTotals = totalsByRepository
+        let count = values.count
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Repository comparison").font(.system(size: 17, weight: .bold, design: palette.fontDesign))
             Text("Repository · commits · additions · deletions · share of selected commits")
                 .font(.system(size: 10, design: palette.fontDesign)).foregroundStyle(palette.muted)
             ForEach(history.repositories.filter { selected.contains($0.id) }) { repo in
-                let totals = DashboardTotals(values.filter { $0.repository == repo.id })
+                let totals = repositoryTotals[repo.id] ?? DashboardTotals([])
                 HStack {
                     Button(repo.id) { detail = repo }.buttonStyle(.plain).lineLimit(1)
                     Spacer()
-                    Text("\(totals.commits) · +\(totals.additions) · −\(totals.deletions) · \(values.isEmpty ? 0 : totals.commits * 100 / values.count)%")
+                    Text("\(totals.commits) · +\(totals.additions) · −\(totals.deletions) · \(count == 0 ? 0 : totals.commits * 100 / count)%")
                         .monospacedDigit()
                 }
             }
@@ -292,7 +290,8 @@ struct RepositoryDashboardView: View {
     }
 
     private var repositoryExplorer: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let totals = totalsByRepository
+        return VStack(alignment: .leading, spacing: 12) {
             TextField("Search all repositories by name or owner", text: $search).textFieldStyle(.roundedBorder)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), alignment: .leading)], alignment: .leading, spacing: 10) {
                 Picker("Owner", selection: $owner) {
@@ -312,7 +311,9 @@ struct RepositoryDashboardView: View {
                 Button("Reset filters") { search = ""; owner = "All owners"; visibility = "All visibility"; activity = "All activity"; archiveFilter = "All repositories"; favouritesOnly = false }
             }
             LazyVStack(spacing: 8) {
-                ForEach(filteredRepositories) { repo in repositoryRow(repo) }
+                ForEach(filteredRepositories) { repo in
+                    repositoryRow(repo, totals: totals[repo.id] ?? DashboardTotals([]))
+                }
             }
             if filteredRepositories.isEmpty {
                 Text(history.repositories.isEmpty ? "The repository list will appear as soon as sync discovers your accessible repositories." : "No repositories match these filters.")
@@ -326,8 +327,7 @@ struct RepositoryDashboardView: View {
         Picker(title, selection: selection) { ForEach(values, id: \.self) { Text($0).tag($0) } }
     }
 
-    private func repositoryRow(_ repo: DashboardRepository) -> some View {
-        let totals = totalsByRepository[repo.id] ?? DashboardTotals([])
+    private func repositoryRow(_ repo: DashboardRepository, totals: DashboardTotals) -> some View {
         let coverage = history.coverage[repo.id]
         let known = coverage?.contains(range.current) == true
         return HStack(spacing: 10) {
@@ -402,11 +402,6 @@ struct RepositoryDashboardView: View {
             now: freshNow, customStart: customStart, customEnd: customEnd)
         let heatmapStart = Calendar.current.date(byAdding: .day, value: -91, to: selectedRange.current.end)!
         github.syncDashboardHistory(range: DateInterval(start: min(selectedRange.previous.start, heatmapStart), end: freshNow))
-    }
-    private func startInitialSyncIfReady() {
-        guard !attemptedInitialSync, github.hasStoredToken, !github.isBusy else { return }
-        attemptedInitialSync = true
-        if github.dashboardHistory == nil { sync() }
     }
 }
 
@@ -502,7 +497,9 @@ private struct DashboardHeatmap: View {
         return (-90...0).map { Calendar.current.date(byAdding: .day, value: $0, to: last)! }
     }
     var body: some View {
-        let counts = Dictionary(grouping: history.commits.filter { selected.isEmpty || selected.contains($0.repository) }) { Calendar.current.startOfDay(for: $0.date) }.mapValues(\.count)
+        let counts = history.dailyCommitCounts(
+            in: DateInterval(start: days[0], end: end), repositories: selected
+        )
         let maximum = max(counts.values.max() ?? 1, 1)
         let count = selected.isEmpty ? history.repositories.count : selected.count
         return VStack(alignment: .leading, spacing: 12) {

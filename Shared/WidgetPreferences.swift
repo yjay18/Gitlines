@@ -299,6 +299,8 @@ enum SharedPreferences {
         static let githubUsername = "github.username"
         static let lastSuccessfulRefresh = "github.lastSuccessfulRefresh"
         static let githubRefreshRequested = "github.refreshRequested"
+        static let githubLastRefreshAttempt = "github.lastRefreshAttempt"
+        static let githubRefreshRetryAt = "github.refreshRetryAt"
     }
 
     static func displayedPeriodKey(family: String, configuredPeriod: String) -> String {

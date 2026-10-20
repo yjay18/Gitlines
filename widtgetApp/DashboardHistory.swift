@@ -53,19 +53,35 @@ struct DashboardHistory: Codable, Sendable {
     var asOf: Date?
 
     func commits(in range: DateInterval, repositories selected: Set<String> = []) -> [DashboardCommit] {
-        commits.filter { $0.date >= range.start && $0.date < range.end && (selected.isEmpty || selected.contains($0.repository)) }
+        let selected = Set(selected.map { $0.lowercased() })
+        return commits.filter {
+            $0.date >= range.start && $0.date < range.end
+                && (selected.isEmpty || selected.contains($0.repository.lowercased()))
+        }
+    }
+
+    func dailyCommitCounts(in range: DateInterval, repositories selected: Set<String> = [],
+                           calendar: Calendar = .current) -> [Date: Int] {
+        Dictionary(grouping: commits(in: range, repositories: selected)) {
+            calendar.startOfDay(for: $0.date)
+        }.mapValues(\.count)
     }
 
     func coveredCount(in range: DateInterval, repositories selected: Set<String> = []) -> Int {
-        repositories.filter { selected.isEmpty || selected.contains($0.id) }
-            .filter { coverage[$0.id]?.contains(range) == true }.count
+        let selected = Set(selected.map { $0.lowercased() })
+        let coverage = Dictionary(coverage.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { first, _ in first })
+        return repositories.filter { selected.isEmpty || selected.contains($0.id.lowercased()) }
+            .filter { coverage[$0.id.lowercased()]?.contains(range) == true }.count
     }
 
     mutating func replaceCommits(for repository: String, in range: DateInterval, with values: [DashboardCommit]) {
-        commits.removeAll { $0.repository == repository && $0.date >= range.start && $0.date < range.end }
+        commits.removeAll {
+            $0.repository.caseInsensitiveCompare(repository) == .orderedSame
+                && $0.date >= range.start && $0.date < range.end
+        }
         var unique = Dictionary(commits.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
         for value in values { unique[value.id] = value }
-        commits = unique.values.sorted { $0.date > $1.date }
+        commits = unique.values.sorted { $0.date == $1.date ? $0.id < $1.id : $0.date > $1.date }
     }
 }
 
@@ -157,7 +173,9 @@ struct DashboardDateRange {
         if unit == .custom {
             start = min(calendar.startOfDay(for: customStart), now)
             end = max(start, min(calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: customEnd))!, now))
-            let days = max(1, calendar.dateComponents([.day], from: start, to: calendar.startOfDay(for: customEnd)).day! + 1)
+            let endDay = calendar.startOfDay(for: end)
+            let days = max(1, calendar.dateComponents([.day], from: start, to: endDay).day!
+                + (end > endDay ? 1 : 0))
             priorStart = calendar.date(byAdding: .day, value: -days, to: start)!
             priorEnd = min(start, priorStart.addingTimeInterval(end.timeIntervalSince(start)))
         } else if rolling {
@@ -189,7 +207,7 @@ struct DashboardTotals {
         additions = values.reduce(0) { $0 + $1.additions }
         deletions = values.reduce(0) { $0 + $1.deletions }
         activeDays = Set(values.map { calendar.startOfDay(for: $0.date) }).count
-        repositories = Set(values.map(\.repository)).count
+        repositories = Set(values.map { $0.repository.lowercased() }).count
     }
     static func change(_ value: Int, from previous: Int) -> String {
         if previous == 0 { return value == 0 ? "No change" : "New activity" }

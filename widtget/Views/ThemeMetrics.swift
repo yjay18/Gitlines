@@ -36,7 +36,7 @@ extension ActivityEntry {
         ActivityIntervalLabels.labels(
             period: period,
             windowMode: preferences.periodWindowMode,
-            referenceDate: date,
+            referenceDate: snapshot.updatedAt,
             cellCount: snapshot.activity.count,
             style: style
         )

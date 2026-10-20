@@ -90,7 +90,7 @@ Gitlines stores GitHub credentials only in the app-scoped macOS Keychain. The Gi
 
 ### How refresh works
 
-- Enable **Refresh widgets when Gitlines is closed** in Widget Studio to let the macOS launch agent refresh without keeping the main app open. Approve Gitlines in Login Items & Extensions if macOS requests it.
+- Enable **Refresh widgets when Gitlines is closed** in Connections to let the macOS launch agent refresh without keeping the main app open. Approve Gitlines in Login Items & Extensions if macOS requests it.
 - Background checks follow your chosen refresh interval; Automatic uses 30 minutes. Checks resume after login and sleep while your Mac is awake and online. macOS controls widget redraw timing.
 - Manual, foreground and scheduled refreshes use the same all-branch history. Widgets reuse complete history instead of dropping activity on newly discovered branches.
 - Failed refreshes retain the last successful snapshot. **Calendar** windows use the current local day, week or month; **Rolling** uses the last 24 hours, 7 days or 30 days.

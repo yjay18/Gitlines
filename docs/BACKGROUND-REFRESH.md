@@ -1,6 +1,6 @@
 # Background widget refresh
 
-In Widget Studio → Widget refresh, turn on **Refresh widgets when Gitlines is
+In Connections → Widget refresh, turn on **Refresh widgets when Gitlines is
 closed**. macOS may ask you to allow Gitlines under System Settings → General →
 Login Items & Extensions. The same switch turns background refresh off.
 
